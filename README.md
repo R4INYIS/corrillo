@@ -7,6 +7,7 @@ Colección de 26 minijuegos sociales para jugar en grupo con un solo móvil. Es 
 - **En el ordenador:** doble clic en `index.html`.
 - **En el móvil, misma wifi:** doble clic en `servir.bat` (usa Python) y abre en el móvil `http://IP-DEL-PC:8000`. La IP aparece en la ventana.
 - **En el móvil, desde cualquier sitio:** sube la carpeta tal cual a un alojamiento estático (GitHub Pages, Netlify, Cloudflare Pages…). Con HTTPS se puede «Añadir a pantalla de inicio» y funciona sin conexión.
+- **Web publicada:** https://r4inyis.github.io/corrillo/. El menú indica cuándo está lista para usar sin conexión y avisa de nuevas versiones, que se pueden aplicar entre partidas.
 
 ## Estructura
 
@@ -14,6 +15,7 @@ Colección de 26 minijuegos sociales para jugar en grupo con un solo móvil. Es 
 index.html            Página única; carga los scripts en orden
 css/styles.css        Estilos (móvil primero)
 js/core/core.js       Registro de juegos, rutas, pantalla de configuración y componentes compartidos
+js/core/library.js    Catálogo, historial, contenido propio y copias de seguridad
 js/content/*.js       Contenido: palabras, preguntas, retos, categorías (solo texto)
 js/games/*.js         Un módulo por minijuego o familia de minijuegos
 sw.js, manifest       Instalación como app y uso sin conexión
@@ -49,3 +51,24 @@ Al publicar cambios, sube `VERSION` en `sw.js` para que los móviles descarguen 
 - **Compartir**: `Corrillo.shareBtn(título, líneas, color)` genera una imagen con el resultado.
 - **Favoritos, recientes y juego al azar** en el menú; **«Usar los de la última partida»** en la configuración de cada juego.
 - **Fotos de Precio justo**: ver `img/precios/LEEME.txt`.
+
+El menú permite filtrar por número de jugadores, duración aproximada y estilo. «Al azar» respeta esos filtros. Los tiempos son orientativos para una partida breve con cuatro personas; los jugadores y ajustes siguen guardándose por juego.
+
+El Modo fiesta tiene un control de picante para toda la sesión, vista previa de las categorías y botón para saltar al siguiente juego. El control desactivado también evita los castigos y la regla de beber. El tono de las tarjetas propias depende de quien las escriba.
+
+El marcador fusiona nombres que solo difieran en mayúsculas o espacios y permite corregir victorias. Cada configuración muestra cuántas tarjetas quedan y permite reiniciar su historial. Verdad o Reto admite preguntas y retos propios en dos apartados.
+
+**Copias de seguridad**, al pie del menú, descarga o restaura un JSON con nombres, preguntas, ajustes, historial y marcador. La restauración valida todo el archivo antes de escribir y conserva los datos anteriores si falta espacio. Los datos se quedan en tu dispositivo; guarda la copia donde prefieras.
+
+Los datos nuevos de `js/content/ampliacion2.js` registran fuentes primarias y fecha de consulta en `Corrillo.sources`. Los resultados enlazan las fuentes disponibles. El contenido anterior no tiene todavía una auditoría retrospectiva completa.
+
+## Comprobar cambios
+
+```powershell
+node --test tests/*.test.js
+python -m pip install -r tests/requirements.txt
+python tests/regression.py
+python tests/smoke.py --seed 20261113 --variants 1 --steps 40
+```
+
+Las pruebas de navegador usan Chrome instalado. Para usar Chromium de Playwright, ejecuta `python -m playwright install chromium` y define `CHROME_CHANNEL=chromium`. La prueba de humo también acepta ids de juegos, `--steps`, `--variants` y `--seed`. La suite comprueba configuración, mazos, puntuación y empates, Modo fiesta, copias, contenido y funcionamiento sin conexión. GitHub Actions ejecuta estas comprobaciones en cada push a `main` y cada pull request.

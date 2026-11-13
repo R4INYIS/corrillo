@@ -28,7 +28,7 @@
           ok ? C.sound.ok() : C.sound.bad();
           ctx.show(h('div', { class: 'center' }, h('div', { class: 'big-emoji' }, ok ? '✅' : '❌'),
             h('h2', null, v === 'V' ? 'Es verdad' : 'Es un invento'), h('div', { class: 'card' }, h('p', { class: 'muted small' }, text), h('p', { class: 'lead' }, why)),
-            btn(t >= total ? 'Ver clasificación' : 'Siguiente', next, 'primary big')));
+            C.sourceNote(text), btn(t >= total ? 'Ver clasificación' : 'Siguiente', next, 'primary big')));
         };
         ctx.show(h('div', { class: 'center' }, h('p', { class: 'pill' }, P[cur] + ' · ' + t + ' de ' + total), h('div', { class: 'card q' }, text),
           h('div', { class: 'row2', style: 'width:100%' }, btn('✅ Verdad', () => answer('V'), 'yes big'), btn('🤥 Invento', () => answer('F'), 'no big')),

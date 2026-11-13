@@ -7,7 +7,7 @@
   /* Una pregunta suelta es [pregunta, respuesta, unidad, mínimo, máximo]. Las parejas del banco «cifras» llevan dos. */
   const sol = (a, u) => C.big(a) + (u ? ' ' + u : '');
   const isYear = (it) => !it[2] && it[3] >= 500;
-  const singles = (s) => C.pool(C.content.cifras, s.cats).flatMap((x) => [[x[0], x[1], x[2], x[6], x[7]], [x[3], x[4], x[5], x[6], x[7]]]).concat(C.pool(C.content.estimaciones, s.cats));
+  const singles = C.estimatePool;
   const dialFor = (it) => C.dial(isYear(it) ? { min: it[3], max: it[4] } : { unit: it[2] });
   /* Tarjeta de pregunta. Los artículos de «Precio justo» traen además emoji, subtítulo y foto opcional. */
   const qCard = (it, small) => (it[5]
@@ -88,7 +88,7 @@
         ctx.show(h('div', { class: 'center' }, h('div', { class: 'card q' }, h('small', null, it[0]), sol(it[1], it[2])), plot(it, P, ans),
           h('div', { class: 'list' }, order.map((i) => h('div', { class: 'item' + (diff[i] === best ? ' hit' : '') }, h('span', null, (diff[i] === best ? '🎯 ' : '') + P[i]), h('b', null, fmtN(it)(ans[i]) + (it[2] && !isYear(it) ? ' ' + it[2] : ''), h('small', { class: 'dist' }, diff[i] ? (ans[i] > it[1] ? '+' : '−') + fmtN(it)(diff[i]) : '¡exacto!'))))),
           !last && worst !== best && C.penalty(P[order[order.length - 1]]),
-          last ? ctx.finish(P, pts, ' pts') : btn('Siguiente ronda', next, 'primary big')));
+          C.sourceNote(it[0]), last ? ctx.finish(P, pts, ' pts') : btn('Siguiente ronda', next, 'primary big')));
       }
     })();
   }
@@ -160,7 +160,7 @@
               ctx.show(h('div', { class: 'center' }, h('div', { class: 'card q' }, h('small', null, it[0]), sol(it[1], it[2])),
                 h('h2', null, ok ? P[win] + ' no se había pasado' : P[lose] + ' se había pasado'),
                 h('p', { class: 'lead' }, 'La apuesta era de al menos ' + sol(bid, it[2]) + '. Punto para ' + P[win] + '.'),
-                !last && C.penalty(P[lose]), last ? ctx.finish(P, pts, ' pts') : btn('Siguiente ronda', next, 'primary big')));
+                C.sourceNote(it[0]), !last && C.penalty(P[lose]), last ? ctx.finish(P, pts, ' pts') : btn('Siguiente ronda', next, 'primary big')));
             }, 'no big')));
         })();
       })();

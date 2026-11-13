@@ -1,6 +1,6 @@
 /* Corrillo — service worker: guarda la app para jugar sin conexión.
    Al cambiar archivos, sube el número de VERSION para que los móviles descarguen la versión nueva. */
-const VERSION = 'corrillo-v6';
+const VERSION = 'corrillo-v7';
 const FILES = [
   "./",
   "index.html",
@@ -17,6 +17,7 @@ const FILES = [
   "js/content/preguntas.js",
   "js/content/universidad.js",
   "js/core/core.js",
+  "js/core/library.js",
   "js/games/azar.js",
   "js/games/cifras.js",
   "js/games/espia.js",
@@ -30,6 +31,7 @@ const FILES = [
   "js/games/tarjetas.js",
   "js/games/verdadreto.js",
   "js/content/ampliacion.js",
+  "js/content/ampliacion2.js",
   "js/content/creditos.js",
   "img/precios/activision.jpg",
   "img/precios/alaska.jpg",
@@ -100,10 +102,29 @@ const FILES = [
   "img/precios/youtube.jpg"
 ];
 
-self.addEventListener('install', (e) => e.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())));
-self.addEventListener('activate', (e) => e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim())));
-/* Primero la red (para ver cambios recientes); si no hay conexión, la copia guardada. */
+const APP_URLS = new Set(FILES.map((path) => new URL(path, self.registration.scope).href));
+/* Las actualizaciones esperan a cerrar la app o a pulsar «Actualizar» en el menú. */
+self.addEventListener('install', (e) => e.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES))));
+self.addEventListener('message', (e) => { if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting(); });
+self.addEventListener('activate', (e) => e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k.startsWith('corrillo-v') && k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim())));
+/* Solo archivos de esta app. Una respuesta HTTP de error nunca sustituye una copia buena. */
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
-  e.respondWith(fetch(e.request).then((r) => { const copy = r.clone(); caches.open(VERSION).then((c) => c.put(e.request, copy)); return r; }).catch(() => caches.match(e.request, { ignoreSearch: true }).then((r) => r || caches.match('index.html'))));
+  const url = new URL(e.request.url);
+  url.search = ''; url.hash = '';
+  if (!APP_URLS.has(url.href)) return;
+  e.respondWith((async () => {
+    const cache = await caches.open(VERSION);
+    const fallback = async () => (await cache.match(url.href)) || (e.request.mode === 'navigate' ? await cache.match(new URL('index.html', self.registration.scope).href) : null);
+    try {
+      const response = await fetch(e.request);
+      if (!response.ok) return (await fallback()) || response;
+      try { await cache.put(url.href, response.clone()); } catch (ignored) { /* Sin espacio: se conserva la respuesta de red. */ }
+      return response;
+    } catch (error) {
+      const saved = await fallback();
+      if (saved) return saved;
+      return Response.error();
+    }
+  })());
 });

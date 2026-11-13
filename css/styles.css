@@ -253,3 +253,21 @@ textarea.textin { resize: vertical; font: inherit; line-height: 1.4; }
 .plot.zoomed .plot-note { color: #3dd6a3; }
 @media (prefers-reduced-motion: reduce) { .plot-dot, .plot-ans { transition: none; } }
 .plot-ans b { position: absolute; left: 50%; top: -20px; transform: translateX(-50%); color: #3dd6a3; font-size: 0.9rem; }
+
+/* Selección de juegos, preparación de fiesta y datos locales. */
+.gmeta { font-size: 0.72rem; font-weight: 700; margin-top: 4px; }
+.menu-filters { margin-bottom: 16px; }
+.menu-filters summary { font-weight: 800; cursor: pointer; }
+.filter { display: grid; gap: 4px; margin-top: 12px; font-size: 0.9rem; font-weight: 700; }
+.filter select { width: 100%; min-height: 44px; border: 2px solid var(--ink); border-radius: 12px; background: var(--paper); padding: 8px 10px; font: inherit; color: inherit; }
+.party-preview { border-top: 1.5px dashed #d9d3c4; padding-top: 14px; }
+.party-preview ul { padding-left: 22px; display: grid; gap: 10px; }
+.party-preview small { display: block; font-size: 0.78rem; }
+.party-tools { padding-top: 6px; text-align: center; }
+.custom-field { display: grid; gap: 6px; margin: 12px 0; font-weight: 700; }
+.score-edit { align-items: center; }
+.score-edit > span { min-width: 0; overflow-wrap: anywhere; }
+.source { text-align: center; overflow-wrap: anywhere; }
+.source a, .foot a { text-decoration: underline; text-underline-offset: 3px; }
+.foot { display: flex; gap: 10px; }
+#offline-status .btn { margin-top: 8px; }

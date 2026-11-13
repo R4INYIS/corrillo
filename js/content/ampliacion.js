@@ -145,7 +145,7 @@
   /* Charadas */
   add(K.charadas, 'animales', ['Perezoso', 'Pez globo', 'Koala', 'Hipopótamo', 'Lagartija', 'Pato', 'Medusa', 'Erizo', 'Ardilla', 'Flamenco']);
   add(K.charadas, 'acciones', ['Hacer la croqueta', 'Darse de alta en el gimnasio', 'Perder el autobús', 'Pisar una pieza de Lego', 'Cocinar con prisa', 'Subir a un tobogán', 'Cambiar un pañal', 'Ordeñar una vaca', 'Atarse los cordones', 'Hacer surf']);
-  add(K.charadas, 'oficios', ['Influencer', 'Repartidor', 'DJ', 'Azafata de vuelo', 'Escultor', 'Domador de leones', 'Fisioterapeuta', 'Mimo', 'Barrendero', 'Socorrista']);
+  add(K.charadas, 'oficios', ['Influencer', 'Repartidor', 'DJ', 'Azafata de vuelo', 'Escultor', 'Domador de leones', 'Fisioterapeuta', 'Mimo', 'Barrendero', 'Relojero']);
   add(K.charadas, 'objetos', ['Lámpara de lava', 'Patinete eléctrico', 'Grapadora', 'Muelle', 'Ventilador de techo', 'Botijo', 'Tirachinas', 'Abanico', 'Cubo de Rubik', 'Silla giratoria']);
   K.charadas.peliculas = ['Titanic', 'El rey león', 'Harry Potter', 'Spider-Man', 'Frozen', 'Tiburón', 'Shrek', 'Toy Story', 'Piratas del Caribe', 'Jurassic Park', 'El exorcista', 'Karate Kid', 'Matrix', 'La sirenita', 'Up', 'Buscando a Nemo', 'Mamma Mia', 'Rocky', 'El juego del calamar', 'Stranger Things', 'La casa de papel', 'Los Simpson', 'Bob Esponja', 'Mary Poppins', 'Star Wars', 'King Kong', 'Pinocho', 'El Grinch', 'Cenicienta', 'Ghostbusters'];
 

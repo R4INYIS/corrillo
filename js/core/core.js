@@ -64,12 +64,14 @@
     set(k, v) {
       try {
         localStorage.setItem('corrillo:' + k, JSON.stringify(v));
-      } catch (e) {}
+        return true;
+      } catch (e) { return false; }
     },
   });
 
   /* ---------- Contenido: categorías y mazo sin repeticiones ---------- */
-  C.pool = (byCat, cats) => cats.flatMap((c) => byCat[c] || []);
+  C.unique = (items) => Array.from(new Map(items.map((it) => [JSON.stringify(it), it])).values());
+  C.pool = (byCat, cats) => C.unique(cats.flatMap((c) => byCat[c] || []));
   function hash(s) {
     let x = 5381;
     for (let i = 0; i < s.length; i++) x = ((x << 5) + x + s.charCodeAt(i)) | 0;
@@ -123,7 +125,8 @@
   };
   /* Cuántas cartas de un pool quedan sin jugar en este dispositivo. */
   C.unplayed = (key, pool) => { const used = usedOf(key); return pool.filter((it) => !used.includes(idOf(it))).length; };
-  C.forget = (key) => { usedMem[key] = []; store.set('used:' + key, []); };
+  C.forget = (key) => { usedMem[key] = []; seenMem[key] = []; delete pending[key]; store.set('used:' + key, []); };
+  C.resetDeckMemory = () => [usedMem, seenMem, pending].forEach((mem) => Object.keys(mem).forEach((key) => delete mem[key]));
 
   /* ---------- Sonido y vibración ---------- */
   let actx = null;
@@ -352,11 +355,10 @@
 
   /* ---------- Configuración local de cada minijuego ---------- */
   /* Categorías de un juego, más «Propias» si el grupo ha escrito contenido suyo. */
-  const bankOf = (g) => C.content[g.custom.bank];
   function catsOf(g) {
     const c = g.cats;
     if (!c) return null;
-    return g.custom && (bankOf(g).custom || []).length ? c.concat({ id: 'custom', label: '✏️ Propias' }) : c;
+    return C.hasCustom(g) ? c.concat({ id: 'custom', label: '✏️ Propias' }) : c;
   }
   function defaults(g) {
     const s = {};
@@ -365,21 +367,38 @@
     const n = g.defPlayers != null ? g.defPlayers : Math.max(g.min || 0, 4);
     return { players: Array(n).fill(''), s };
   }
+  C.normalizeCfg = function (g, cfg) {
+    (g.settings || []).forEach((o) => {
+      if (o.type === 'step') {
+        const mx = Math.max(o.min, typeof o.max === 'function' ? o.max(cfg.players.length, cfg.s) : o.max);
+        cfg.s[o.key] = Math.max(o.min, Math.min(mx, Math.round(Number(cfg.s[o.key])) || o.def));
+      } else if (o.type === 'toggle') cfg.s[o.key] = typeof cfg.s[o.key] === 'boolean' ? cfg.s[o.key] : o.def;
+      else if (!o.options.some(([v]) => v === cfg.s[o.key])) cfg.s[o.key] = o.def;
+    });
+    return cfg;
+  };
   function loadCfg(g) {
     const d = defaults(g), c = store.get('cfg:' + g.id, null);
-    if (!c) return d;
+    if (!c) return C.normalizeCfg(g, d);
     const cfg = { players: Array.isArray(c.players) ? c.players.map(String) : d.players, s: Object.assign(d.s, c.s || {}) };
     if (catsOf(g)) {
-      const known = c.known || [];
-      cfg.s.cats = (cfg.s.cats || []).filter((id) => catsOf(g).some((k) => k.id === id))
-        .concat(catsOf(g).filter((k) => !k.spicy && !known.includes(k.id) && !(cfg.s.cats || []).includes(k.id)).map((k) => k.id));
+      const known = Array.isArray(c.known) ? c.known : [];
+      const selected = Array.isArray(cfg.s.cats) ? cfg.s.cats : [];
+      cfg.s.cats = selected.filter((id) => catsOf(g).some((k) => k.id === id))
+        .concat(catsOf(g).filter((k) => !k.spicy && !known.includes(k.id) && !selected.includes(k.id)).map((k) => k.id));
     }
-    return cfg;
+    return C.normalizeCfg(g, cfg);
   }
+  C.loadCfg = loadCfg;
   function problem(g, cfg) {
     const n = cfg.players.length, min = g.min || 0, max = g.max || 20, what = g.playersWord || 'jugadores';
     if (n < min) return 'Hacen falta al menos ' + min + ' ' + what + '.';
     if (n > max) return 'El máximo es de ' + max + ' ' + what + '.';
+    if (g.id !== 'azar' && !g.hidePlayers) {
+      const names = C.playerNames(g, cfg.players), keys = names.map(C.playerKey);
+      const duplicate = keys.findIndex((key, i) => keys.indexOf(key) !== i);
+      if (duplicate >= 0) return 'Hay nombres repetidos: ' + names[duplicate] + '. Añade un apellido o un mote.';
+    }
     if (catsOf(g) && !cfg.s.cats.length) return 'Elige al menos una categoría.';
     return (g.validate && g.validate(cfg.s, n)) || null;
   }
@@ -388,9 +407,9 @@
 
   function setup(g) {
     const cfg = loadCfg(g), max = g.max || 20;
-    const save = () => store.set('cfg:' + g.id, Object.assign({ known: (catsOf(g) || []).map((k) => k.id) }, cfg));
-    const plist = h('div', { class: 'plist' }), phead = h('div'), sbox = h('div'), msg = h('p', { class: 'warn' });
-    const go = btn('Empezar', () => { if (!check()) location.hash = '#/j/' + g.id + '/jugar'; }, 'primary big');
+    const save = () => { C.normalizeCfg(g, cfg); store.set('cfg:' + g.id, Object.assign({ known: (catsOf(g) || []).map((k) => k.id) }, cfg)); };
+    const plist = h('div', { class: 'plist' }), phead = h('div'), sbox = h('div'), history = h('div'), msg = h('p', { class: 'warn', role: 'status' });
+    const go = btn('Empezar', () => { save(); if (!check()) location.hash = '#/j/' + g.id + '/jugar'; }, 'primary big');
     const one = g.playerWord || 'Jugador';
 
     function check() {
@@ -411,7 +430,7 @@
       plist.replaceChildren(...cfg.players.map((name, i) =>
         h('div', { class: 'prow' }, h('span', { class: 'pnum' }, i + 1),
           h('input', { type: 'text', maxLength: 16, value: name, placeholder: one + ' ' + (i + 1), autocomplete: 'off', enterKeyHint: 'next', 'aria-label': 'Nombre ' + (i + 1),
-            oninput: (e) => { cfg.players[i] = e.target.value; save(); } }),
+            oninput: (e) => { cfg.players[i] = e.target.value; save(); check(); } }),
           h('button', { type: 'button', class: 'x', 'aria-label': 'Quitar', onclick: () => { cfg.players.splice(i, 1); changed(true); } }, '×'))));
     }
     function drawSettings() {
@@ -423,10 +442,9 @@
           ctl = h('button', { type: 'button', class: 'switch' + (s[o.key] ? ' on' : ''), role: 'switch', 'aria-checked': String(!!s[o.key]), 'aria-label': o.label, onclick: () => { s[o.key] = !s[o.key]; changed(); } }, h('i'));
         else if (o.type === 'step') {
           const mx = Math.max(o.min, typeof o.max === 'function' ? o.max(n, s) : o.max);
-          s[o.key] = Math.max(o.min, Math.min(mx, s[o.key]));
           ctl = stepper(s[o.key], o.min, mx, (v) => { s[o.key] = v; changed(); });
         } else
-          ctl = h('div', { class: 'chips' }, o.options.map(([v, l]) => h('button', { type: 'button', class: 'chip' + (s[o.key] === v ? ' on' : ''), onclick: () => { s[o.key] = v; changed(); } }, l)));
+          ctl = h('div', { class: 'chips' }, o.options.map(([v, l]) => h('button', { type: 'button', class: 'chip' + (s[o.key] === v ? ' on' : ''), 'aria-pressed': String(s[o.key] === v), onclick: () => { s[o.key] = v; changed(); } }, l)));
         rows.push(h('div', { class: 'srow' + (o.type === 'select' ? ' col' : '') }, h('div', null, h('div', { class: 'slabel' }, o.label), o.help && h('div', { class: 'muted small' }, o.help)), ctl));
       });
       if (catsOf(g))
@@ -437,6 +455,13 @@
               onclick: () => { s.cats = on ? s.cats.filter((x) => x !== c.id) : s.cats.concat(c.id); changed(); } }, c.label + (c.spicy ? ' 🌶️ +18' : ''));
           }))));
       sbox.replaceChildren(...rows);
+      if (g.preview) sbox.append(g.preview(s, n));
+      const decks = C.decks(g, s);
+      history.replaceChildren(...(decks.length ? [h('details', { class: 'card how' }, h('summary', null, 'Tarjetas disponibles'),
+        decks.map((d) => h('p', { class: 'muted small', 'data-deck': d.key }, d.repeat ? 'Las escalas pueden repetirse entre partidas.' : d.label + ': quedan ' + C.unplayed(d.key, d.pool) + ' de ' + C.unique(d.pool).length + ' sin jugar.')),
+        decks.some((d) => !d.repeat) && btn('Reiniciar historial de este juego', async () => {
+          if (await C.confirm('Las tarjetas de este juego podrán volver a salir. ¿Reiniciar su historial?', 'Reiniciar', 'Cancelar')) { decks.forEach((d) => C.forget(d.key)); drawSettings(); }
+        }, 'small'))] : []));
     }
     function changed(players) {
       save();
@@ -451,21 +476,27 @@
     const copyBtn = last && last.length && !g.hidePlayers ? btn('Usar los de la última partida (' + last.length + ')', () => { cfg.players = last.slice(0, max); changed(true); }, 'small') : null;
     let customBox = null;
     if (g.custom) {
-      const ta = h('textarea', { class: 'textin', rows: 5, value: (bankOf(g).custom || []).join('\n'), placeholder: g.custom.hint });
+      const kinds = g.custom.dual ? ['verdad', 'reto'] : [''];
+      const inputs = kinds.map((kind) => h('textarea', { class: 'textin', rows: 5, value: (C.customBank(g, kind).custom || []).join('\n'), placeholder: kind ? kind === 'verdad' ? 'Una verdad por línea' : 'Un reto por línea' : g.custom.hint, 'aria-label': kind ? 'Tus ' + (kind === 'verdad' ? 'verdades' : 'retos') : 'Tu contenido' }));
       const note = h('span', { class: 'muted small' });
-      customBox = h('details', { class: 'card how' }, h('summary', null, '✏️ Contenido propio'), h('p', { class: 'muted small', style: 'margin:10px 0' }, g.custom.hint), ta,
+      customBox = h('details', { class: 'card how' }, h('summary', null, '✏️ Contenido propio'), h('p', { class: 'muted small', style: 'margin:10px 0' }, g.custom.hint),
+        kinds.map((kind, i) => h('label', { class: 'custom-field' }, kind ? kind === 'verdad' ? 'Verdades' : 'Retos' : 'Tus tarjetas', inputs[i])),
         h('div', { class: 'srow' }, note, btn('Guardar', () => {
-          const lines = ta.value.split('\n').map((x) => x.trim()).filter(Boolean).map(g.custom.fix || ((x) => x)).filter(Boolean);
-          bankOf(g).custom = lines;
-          store.set('custom:' + g.id, lines);
-          ta.value = lines.join('\n');
-          cfg.s.cats = cfg.s.cats.filter((x) => x !== 'custom').concat(lines.length ? ['custom'] : []);
-          note.textContent = lines.length + ' guardadas';
-          changed();
+          try {
+            const lists = inputs.map((input) => C.parseCustom(g, input.value));
+            const value = g.custom.dual ? Object.fromEntries(kinds.map((kind, i) => [kind, lists[i]])) : lists[0];
+            if (!store.set('custom:' + g.id, value)) throw new Error('No se ha podido guardar en este dispositivo.');
+            C.applyCustom(g, value);
+            inputs.forEach((input, i) => (input.value = lists[i].join('\n')));
+            cfg.s.cats = cfg.s.cats.filter((x) => x !== 'custom').concat(C.hasCustom(g) ? ['custom'] : []);
+            note.textContent = lists.flat().length + ' guardadas';
+            changed();
+          } catch (e) { note.textContent = e.message; }
         }, 'small')));
     }
     drawPlayers();
     drawSettings();
+    save();
     check();
     document.title = g.name + ' · ' + C.NAME;
     mount(h('div', { class: 'setup', style: '--c:' + g.color },
@@ -476,7 +507,7 @@
         g.hidePlayers ? null : h('section', { class: 'card' }, h('h3', null, g.playersTitle || 'Jugadores'), phead, plist,
           cfg.players.length < max ? null : h('p', { class: 'muted small' }, 'Máximo ' + max + '.'),
           h('div', { class: 'chips' }, btn('+ Añadir', () => setCount(cfg.players.length + 1), 'small'), copyBtn)),
-        (g.settings || catsOf(g)) ? h('section', { class: 'card' }, h('h3', null, 'Ajustes'), sbox) : null, customBox),
+        (g.settings || catsOf(g)) ? h('section', { class: 'card' }, h('h3', null, 'Ajustes'), sbox) : null, customBox, history),
       h('div', { class: 'bar' }, h('div', { class: 'wrap' }, msg, go))));
   }
 
@@ -489,18 +520,11 @@
     } catch (e) {}
   }
 
-  /* Marcador de la noche: victorias acumuladas entre juegos. */
-  function nightAdd(names) {
-    const n = store.get('night', {});
-    names.forEach((x) => (n[x] = (n[x] || 0) + 1));
-    store.set('night', n);
-  }
-
   /* Castigos para quien pierde (configurables desde el menú). */
   const penCfg = () => Object.assign({ on: true, lists: ['suaves', 'retos'], custom: [] }, store.get('pen', {}));
   C.penalty = function (name) {
     const p = penCfg();
-    const pool = p.on ? C.pool(C.content.castigos, p.lists).concat(p.custom) : [];
+    const pool = p.on ? C.pool(C.content.castigos, p.lists.filter((id) => C.partySpicy !== false || id !== 'beber')).concat(p.custom) : [];
     return pool.length && name ? h('div', { class: 'card pen' }, h('small', null, 'Castigo para ' + name), pick(pool)) : null;
   };
 
@@ -537,21 +561,23 @@
   function play(g) {
     const cfg = loadCfg(g);
     const el = h('main', { class: 'wrap stage' }), ttl = h('span', { class: 'ttl' }, g.emoji + ' ' + g.name);
-    const cleanup = [];
+    const cleanup = new Set(), tools = h('div', { class: 'party-tools wrap', hidden: true });
     if (!g.hidePlayers && cfg.players.length) store.set('last', cfg.players);
     store.set('recent', [g.id].concat(store.get('recent', []).filter((x) => x !== g.id)).slice(0, 4));
     const ctx = {
       game: g, el, alive: true,
-      players: cfg.players.map((p, i) => p.trim() || (g.playerWord || 'Jugador') + ' ' + (i + 1)),
+      players: C.playerNames(g, cfg.players), resultRecorded: false,
       s: JSON.parse(JSON.stringify(cfg.s)),
-      onExit: (f) => cleanup.push(f),
+      onExit: (f) => { cleanup.add(f); return () => cleanup.delete(f); },
       show(...kids) { el.replaceChildren(); add(el, kids); window.scrollTo(0, 0); },
       turn: () => false, /* en modo fiesta devuelve true cuando toca cambiar de juego */
       setTitle(t, color) { ttl.textContent = t; root.style.setProperty('--c', color); },
+      setTools(...nodes) { tools.replaceChildren(...nodes); tools.hidden = !nodes.length; },
       /* Pantalla de clasificación final: suma la victoria al marcador de la noche y castiga al último. */
       finish(names, pts, unit, teams) {
         const top = Math.max(...pts), low = Math.min(...pts);
-        if (!teams && top > 0) nightAdd(names.filter((_, i) => pts[i] === top));
+        if (!this.resultRecorded && !teams && top > 0) C.nightAdd(names.filter((_, i) => pts[i] === top));
+        this.resultRecorded = true;
         const order = names.map((n, i) => [n, pts[i]]).sort((a, b) => b[1] - a[1]);
         return h('div', { class: 'center' }, h('h2', null, 'Clasificación final'), C.scores(names, pts, unit),
           top !== low && C.penalty(pick(names.filter((_, i) => pts[i] === low))),
@@ -561,7 +587,8 @@
     function stop() {
       ctx.alive = false;
       C.discard();   /* lo que quedara a medias no cuenta como jugado */
-      cleanup.splice(0).forEach((f) => { try { f(); } catch (e) {} });
+      cleanup.forEach((f) => { try { f(); } catch (e) {} });
+      cleanup.clear();
       session = null;
       wake(false);
       try { speechSynthesis.cancel(); } catch (e) {}
@@ -576,7 +603,7 @@
       h('header', { class: 'top' },
         h('button', { type: 'button', class: 'icon', 'aria-label': 'Salir de la partida', onclick: async () => { if (await C.confirm('¿Salir de la partida?', 'Salir', 'Seguir jugando')) ctx.setup(); } }, '✕'),
         ttl, h('span', { class: 'icon ghost' })),
-      el);
+      tools, el);
     mount(root);
     wake(true);
     g.play(ctx);
@@ -584,15 +611,38 @@
 
   /* Modo fiesta: ejecuta otro juego dentro de la partida actual, con los mismos jugadores,
      y vuelve a llamar a done() tras «limit» tarjetas o al terminar. */
-  C.canPlay = (g, n) => !problem(g, { players: Array(n).fill(''), s: loadCfg(g).s });
+  C.partySettings = (g, n, spicy) => {
+    const cfg = C.normalizeCfg(g, { players: Array(n).fill(''), s: JSON.parse(JSON.stringify(loadCfg(g).s)) });
+    if (spicy != null && g.cats) {
+      const hot = g.cats.filter((c) => c.spicy).map((c) => c.id);
+      cfg.s.cats = cfg.s.cats.filter((id) => !hot.includes(id)).concat(spicy ? hot : []);
+      if (!spicy && g.id === 'yonunca' && cfg.s.rule === 'beber') cfg.s.rule = 'dedo';
+    }
+    return cfg.s;
+  };
+  C.canPlay = (g, n, spicy) => !!g && !problem(g, { players: Array(n).fill(''), s: C.partySettings(g, n, spicy) });
   C.sub = function (ctx, g, limit, done) {
-    let n = 0;
+    let n = 0, active = true;
+    const cleanup = new Set();
+    function leave(commit) {
+      if (!active) return false;
+      active = sub.alive = false;
+      cleanup.forEach((f) => { try { f(); } catch (e) {} });
+      cleanup.clear(); unhook(); ctx.setTools();
+      commit ? C.commit() : C.discard();
+      return true;
+    }
+    const advance = (commit) => { if (leave(commit)) done(); };
     const sub = Object.assign(Object.create(ctx), {
-      game: g, s: JSON.parse(JSON.stringify(loadCfg(g).s)),
-      turn: () => (++n > limit ? (done(), true) : false),
-      again: () => C.sub(ctx, g, limit, done),
+      game: g, alive: true, resultRecorded: false, s: C.partySettings(g, ctx.players.length, ctx.s.spicy),
+      onExit: (f) => { cleanup.add(f); return () => cleanup.delete(f); },
+      turn: () => (!active || (++n > limit ? (advance(true), true) : false)),
+      again: () => { if (leave(true)) C.sub(ctx, g, limit, done); },
+      show(...nodes) { if (active && ctx.alive) ctx.show(...nodes); },
     });
-    sub.endBar = () => (C.commit(), h('div', { class: 'stack endbar' }, btn('Siguiente juego', done, 'primary big'), h('div', { class: 'row2' }, btn('Repetir', sub.again), btn('Terminar fiesta', ctx.menu))));
+    const unhook = ctx.onExit(() => leave(false));
+    sub.endBar = () => (C.commit(), h('div', { class: 'stack endbar' }, btn('Siguiente juego', () => advance(true), 'primary big'), h('div', { class: 'row2' }, btn('Repetir', sub.again), btn('Terminar fiesta', ctx.menu))));
+    ctx.setTools(btn('Saltar al siguiente juego', () => advance(false), 'small'));
     ctx.setTitle('🎉 ' + g.emoji + ' ' + g.name, g.color);
     g.play(sub);
   };
@@ -601,22 +651,30 @@
   const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const gcard = (g) => h('a', { class: 'gcard', href: '#/j/' + g.id, style: '--c:' + g.color },
     h('span', { class: 'gemoji' }, g.emoji), h('strong', null, g.name), h('span', { class: 'gtag' }, g.tag),
-    h('span', { class: 'gnum' }, g.badge || '👥 ' + g.min + '–' + (g.max || 20)));
+    h('span', { class: 'gnum' }, g.badge || '👥 ' + g.min + '–' + (g.max || 20)),
+    h('span', { class: 'gmeta' }, '≈ ' + C.catalog[g.id][1] + ' min · ' + C.styles[C.catalog[g.id][0]]));
   function menu() {
     let q = '', grp = 'all';
+    const filters = Object.assign({ players: 0, minutes: 0, style: '' }, store.get('menu', {}));
     const list = h('div'), chips = h('div', { class: 'chips scroll' });
     const games = C.games.filter((g) => !g.hidden), byId = (ids) => ids.map((id) => games.find((g) => g.id === id)).filter(Boolean);
+    const matches = (g) => C.matches(g, filters) && (grp === 'all' || g.group === grp) && (!q || norm(g.name + ' ' + g.tag).includes(norm(q)));
+    const random = btn('🎲 Al azar', () => { const eligible = games.filter(matches); if (eligible.length) location.hash = '#/j/' + pick(eligible).id; }, 'small');
+    const select = (label, key, options) => h('label', { class: 'filter' }, h('span', null, label), h('select', {
+      'aria-label': label, onchange: (e) => { filters[key] = key === 'style' ? e.target.value : Number(e.target.value); store.set('menu', filters); draw(); },
+    }, options.map(([value, text]) => h('option', { value, selected: filters[key] === value }, text))));
     function draw() {
       chips.replaceChildren(...[['all', 'Todos']].concat(C.groups).map(([id, l]) =>
-        h('button', { type: 'button', class: 'chip' + (grp === id ? ' on' : ''), onclick: () => { grp = id; draw(); } }, l)));
+        h('button', { type: 'button', class: 'chip' + (grp === id ? ' on' : ''), 'aria-pressed': String(grp === id), onclick: () => { grp = id; draw(); } }, l)));
+      random.disabled = !games.some(matches);
       const out = [];
       const section = (label, gs) => gs.length && out.push(h('h2', { class: 'gtitle' }, label), h('div', { class: 'grid' }, gs.map(gcard)));
       if (!q && grp === 'all') {
-        section('★ Favoritos', byId(store.get('fav', [])));
-        section('Jugado hace poco', byId(store.get('recent', [])));
+        section('★ Favoritos', byId(store.get('fav', [])).filter(matches));
+        section('Jugado hace poco', byId(store.get('recent', [])).filter(matches));
       }
       C.groups.forEach(([id, label]) => {
-        if (grp === 'all' || grp === id) section(label, games.filter((g) => g.group === id && (!q || norm(g.name + ' ' + g.tag).includes(norm(q)))));
+        if (grp === 'all' || grp === id) section(label, games.filter((g) => g.group === id && matches(g)));
       });
       list.replaceChildren(...(out.length ? out : [h('p', { class: 'muted center' }, 'Ningún juego coincide con la búsqueda.')]));
     }
@@ -628,12 +686,17 @@
       h('main', { class: 'wrap' },
         h('a', { class: 'banner', href: '#/j/fiesta' }, h('span', { class: 'gemoji' }, '🎉'), h('span', null, h('strong', null, 'Modo fiesta'), h('br'), 'Una ronda de cada juego, sin volver al menú.')),
         h('div', { class: 'tools' },
-          btn('🎲 Al azar', () => { location.hash = '#/j/' + pick(games).id; }, 'small'),
+          random,
           h('a', { class: 'btn small', href: '#/marcador' }, '🏆 Marcador'), h('a', { class: 'btn small', href: '#/castigos' }, '😈 Castigos')),
         h('input', { type: 'search', class: 'search', placeholder: 'Buscar juego…', 'aria-label': 'Buscar juego', oninput: (e) => { q = e.target.value; draw(); } }),
+        h('details', { class: 'card menu-filters' }, h('summary', null, 'Encontrar juego para el grupo'),
+          select('Jugadores', 'players', [[0, 'Cualquier grupo']].concat(Array.from({ length: 20 }, (_, i) => [i + 1, String(i + 1)]))),
+          select('Duración aproximada', 'minutes', [[0, 'Cualquier duración'], [5, 'Hasta 5 min'], [15, 'Hasta 15 min'], [30, 'Hasta 30 min']]),
+          select('Estilo', 'style', [['', 'Cualquier estilo']].concat(Object.entries(C.styles))),
+          h('p', { class: 'muted small' }, 'Tiempos orientativos para una partida breve con cuatro personas. Al azar también respeta estos filtros.')),
         chips, list,
-        h('p', { class: 'muted small center foot' }, 'Funciona sin conexión. Cada juego guarda sus propios jugadores y ajustes en este dispositivo.',
-          h('br'), h('a', { href: '#/creditos' }, 'Créditos de las fotos')))));
+        h('div', { class: 'muted small center foot' }, offlinePanel(), 'Cada juego guarda sus propios jugadores y ajustes en este dispositivo.',
+          h('a', { href: '#/datos' }, 'Copias de seguridad'), h('a', { href: '#/creditos' }, 'Créditos de las fotos')))));
   }
 
   /* Créditos de las fotos: C.content.creditos = [[ruta, qué es, autor, licencia, url de la ficha], …] */
@@ -652,12 +715,16 @@
     h('main', { class: 'wrap' }, kids)));
 
   function scoreboard() {
-    const n = store.get('night', {}), names = Object.keys(n);
+    const rows = Array.from(C.nightRows().values()).sort((a, b) => b.wins - a.wins);
+    const name = h('input', { type: 'text', class: 'textin', maxLength: 16, placeholder: 'Nombre del jugador', 'aria-label': 'Jugador al que añadir una victoria' });
     page('Marcador de la noche',
-      h('p', { class: 'muted' }, 'Victorias acumuladas en los juegos con clasificación. Los jugadores se identifican por su nombre.'),
-      names.length ? C.scores(names, names.map((k) => n[k]), ' 🏆') : h('div', { class: 'card' }, 'Todavía no ha ganado nadie. Jugad a algo con puntuación.'),
-      names.length ? C.shareBtn('Marcador de la noche', names.sort((a, b) => n[b] - n[a]).map((k) => k + ' · ' + n[k] + ' 🏆')) : null,
-      names.length ? btn('Poner el marcador a cero', () => { store.set('night', {}); scoreboard(); }) : null);
+      h('p', { class: 'muted' }, 'Victorias acumuladas en los juegos con clasificación. Mayúsculas y espacios no crean jugadores distintos. Puedes corregir el marcador con − y +.'),
+      rows.length ? h('div', { class: 'card scores' }, rows.map((row) => h('div', { class: 'score score-edit' }, h('span', null, row.name),
+        h('div', { class: 'stepper' }, h('button', { type: 'button', 'aria-label': 'Quitar una victoria a ' + row.name, disabled: !row.wins, onclick: () => { C.nightAdjust(row.name, -1); scoreboard(); } }, '−'),
+          h('b', null, row.wins + ' 🏆'), h('button', { type: 'button', 'aria-label': 'Añadir una victoria a ' + row.name, onclick: () => { C.nightAdjust(row.name, 1); scoreboard(); } }, '+'))))) : h('div', { class: 'card' }, 'Todavía no ha ganado nadie. Jugad a algo con puntuación.'),
+      h('div', { class: 'card stack' }, name, btn('Añadir victoria', () => { if (C.cleanName(name.value)) { C.nightAdjust(name.value, 1); scoreboard(); } }, 'small')),
+      rows.length ? C.shareBtn('Marcador de la noche', rows.map((r) => r.name + ' · ' + r.wins + ' 🏆')) : null,
+      rows.length ? btn('Poner el marcador a cero', async () => { if (await C.confirm('¿Borrar las victorias del marcador de la noche?', 'Borrar', 'Cancelar')) { store.set('night', {}); scoreboard(); } }) : null);
   }
 
   function penalties() {
@@ -697,14 +764,40 @@
     if (location.hash === '#/marcador') return scoreboard();
     if (location.hash === '#/castigos') return penalties();
     if (location.hash === '#/creditos') return credits();
+    if (location.hash === '#/datos') return page('Copias de seguridad', C.backupPanel());
     menu();
   }
 
+  let swRegistration = null, offlineReady = false, offlineFailed = false, reloadOnControl = false;
+  function offlinePanel() {
+    const el = h('div', { id: 'offline-status', role: 'status' });
+    paintOffline(el);
+    return el;
+  }
+  function paintOffline(el) {
+    if (!el) return;
+    el.replaceChildren(location.protocol === 'file:' ? 'Abierto desde este dispositivo.' : offlineReady ? '✓ Disponible sin conexión.' : offlineFailed || !('serviceWorker' in navigator) ? 'El modo sin conexión no está preparado en este navegador.' : 'Preparando el modo sin conexión…');
+    if (swRegistration && swRegistration.waiting && !session) el.append(btn('Actualizar a la nueva versión', () => {
+      reloadOnControl = true;
+      swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }, 'small'));
+  }
+  const refreshOffline = () => paintOffline(document.getElementById('offline-status'));
   window.addEventListener('hashchange', route);
   window.addEventListener('DOMContentLoaded', () => {
-    C.games.forEach((g) => { if (g.custom) bankOf(g).custom = store.get('custom:' + g.id, []); });
+    C.loadCustom();
     route();
   });
   document.addEventListener('visibilitychange', () => { if (session && document.visibilityState === 'visible') wake(true); });
-  if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+    navigator.serviceWorker.register('sw.js').then((reg) => {
+      swRegistration = reg; refreshOffline();
+      reg.addEventListener('updatefound', () => {
+        const worker = reg.installing;
+        if (worker) worker.addEventListener('statechange', () => { if (worker.state === 'installed') setTimeout(refreshOffline, 0); });
+      });
+      navigator.serviceWorker.ready.then(() => { offlineReady = true; refreshOffline(); });
+    }).catch(() => { offlineFailed = true; refreshOffline(); });
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (reloadOnControl) location.reload(); });
+  }
 })();

@@ -10,6 +10,7 @@
       'Pulsad «Continuar» para pasar al siguiente jugador.',
     ],
     cats: [{ id: 'uni', label: '🎓 Universidad' }, { id: 'clasico', label: 'Clásico' }, { id: 'divertido', label: 'Divertido' }, { id: 'profundo', label: 'Profundo' }, { id: 'picante', label: 'Picante', spicy: true }],
+    custom: { bank: 'verdadreto', dual: true, hint: 'Una verdad o un reto por línea en su apartado. Puedes escribir {j} para mencionar a otro jugador.' },
     settings: [
       { key: 'order', label: 'Orden de turnos', type: 'select', def: 'orden', options: [['orden', 'Por orden'], ['azar', 'Al azar']] },
       { key: 'skip', label: 'Permitir cambiar de tarjeta', type: 'toggle', def: true },

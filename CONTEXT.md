@@ -8,7 +8,7 @@ Documento de traspaso para continuar el desarrollo desde Claude Code (u otro asi
 
 - **Propietario:** Sergio. Carpeta del proyecto: `E:\sergio\Programacion\corrillo` (Windows).
 - **Público objetivo:** estudiantes universitarios españoles. Todo el texto está en español de España.
-- **Estado:** 26 juegos, Modo fiesta y funciones generales terminados. Probados en navegador con tamaño de móvil (prueba de humo) y por Sergio en su móvil real a través de la web publicada, sin problemas detectados.
+- **Estado:** 26 juegos, Modo fiesta y funciones generales. Incluye filtros del menú, copias de seguridad, historial visible, marcador editable y contenido propio en Verdad o Reto. Pruebas reproducibles en `tests/` y comprobaciones automáticas en GitHub Actions. Sergio ha probado la versión anterior en su móvil; las funciones nuevas se verifican en Chrome con tamaño de móvil.
 - **Uso:** personal y no comercial, como alternativa propia a las apps de pago de este estilo.
 - **Publicada:** repositorio público https://github.com/R4INYIS/corrillo (cuenta personal, no la de la empresa) y web en GitHub Pages: https://r4inyis.github.io/corrillo/ (HTTPS, se actualiza con cada push a `main`).
 
@@ -31,9 +31,11 @@ Documento de traspaso para continuar el desarrollo desde Claude Code (u otro asi
 | Probar en el móvil sin publicar (misma wifi) | `servir.bat` (lanza `python -m http.server 8000`) y abrir `http://IP-DEL-PC:8000`. Este script no se ha usado nunca |
 | Publicar cambios | `git push` a `main`; GitHub Pages actualiza la web en uno o dos minutos. Antes, subir `VERSION` en `sw.js` para que los móviles descarguen la versión nueva |
 | Comprobar sintaxis | `node --check` sobre cada archivo de `js/` |
+| Pruebas rápidas de lógica y contenido | `node --test tests/*.test.js` (Node 22 o posterior; sin instalar dependencias JavaScript) |
+| Regresiones de interfaz y PWA | `python tests/regression.py` (Chrome; `pip install -r tests/requirements.txt`) |
 | Prueba de humo | `python tests/smoke.py [id …]` (necesita `pip install playwright` y Chrome). Juega cada juego (o solo los indicados) con ajustes al azar pulsando botones al azar y falla si hay errores de JavaScript. Todos tardan 10–15 minutos |
 
-El service worker (`sw.js`) solo se registra bajo `http(s)`, no en `file://`. Usa estrategia «red primero, caché si no hay conexión». **Al añadir o quitar archivos hay que actualizar la lista `FILES` y subir `VERSION`** (ahora `corrillo-v6`). La instalación como app y el uso sin conexión no se han comprobado de forma expresa.
+El service worker (`sw.js`) solo se registra bajo `http(s)`, no en `file://`. Usa red primero y recupera la copia guardada también ante errores HTTP; no guarda respuestas de error ni devuelve HTML en lugar de scripts o imágenes. Solo borra cachés cuyo nombre empieza por `corrillo-v`. **Al añadir o quitar archivos hay que actualizar `FILES` y subir `VERSION`** (ahora `corrillo-v7`). El menú indica cuándo está preparado el modo sin conexión. Las actualizaciones esperan a cerrar la app o a pulsar «Actualizar» desde el menú, sin interrumpir partidas. El arranque sin conexión y la recuperación ante un HTTP 503 se comprueban en Chrome; la instalación real en Android e iPhone sigue pendiente.
 
 ## 4. Estructura de archivos
 
@@ -49,6 +51,7 @@ icons/                  Icono SVG y PNG (180, 192, 512)
 img/precios/            Fotos de «Precio justo» (Wikimedia Commons, libres; créditos en js/content/creditos.js)
 tests/smoke.py          Prueba de humo con Playwright
 js/core/core.js         Núcleo (ver sección 5)
+js/core/library.js      Catálogo, contenido propio, mazos por juego, marcador y copias de seguridad
 js/content/             Solo datos: palabras, preguntas, retos…
   deduccion.js            impostor, mentiroso, espia
   cifras.js               parejas de preguntas numéricas
@@ -57,11 +60,12 @@ js/content/             Solo datos: palabras, preguntas, retos…
   universidad.js          AÑADE categorías «uni», «internet», «famosos» a los bancos anteriores + `estimaciones`
   nuevos.js               yonunca, cinco, quienlodijo, conocemos, onda, precios, castigos, impostorPares
   ampliacion.js           Tercera tanda: amplía casi todos los bancos y crea categorías nuevas (ver sección 7)
+  ampliacion2.js          Cuarta tanda: 78 entradas nuevas y fuentes primarias de sus datos
   creditos.js             Generado: autor y licencia de cada foto de «Precio justo» (página #/creditos)
 js/games/               Lógica de los juegos (ver tabla de la sección 6)
 ```
 
-**Orden de carga en `index.html`:** `core.js` → contenido (`deduccion`, `cifras`, `preguntas`, `palabras`, `universidad`, `nuevos`, `ampliacion`, `creditos`) → juegos. `universidad.js`, `nuevos.js` y `ampliacion.js` amplían bancos ya creados, así que deben ir después de los otros cuatro. El orden de los scripts de juegos es el orden en que aparecen en el menú dentro de cada grupo.
+**Orden de carga en `index.html`:** `core.js` → `library.js` → contenido (`deduccion`, `cifras`, `preguntas`, `palabras`, `universidad`, `nuevos`, `ampliacion`, `ampliacion2`, `creditos`) → juegos. Las ampliaciones dependen de los bancos anteriores. El orden de los scripts de juegos es el orden del menú dentro de cada grupo.
 
 ## 5. Arquitectura (`js/core/core.js`)
 
@@ -69,7 +73,7 @@ Todo cuelga del global `Corrillo` (alias `C` dentro de los archivos).
 
 ### Registro y rutas
 - `C.register({...})` añade un juego a `C.games`. `C.content` guarda los bancos de contenido.
-- Rutas por hash: `#/` menú · `#/j/<id>` configuración · `#/j/<id>/jugar` partida · `#/marcador` · `#/castigos` · `#/creditos` (enlazada al pie del menú).
+- Rutas por hash: `#/` menú · `#/j/<id>` configuración · `#/j/<id>/jugar` partida · `#/marcador` · `#/castigos` · `#/creditos` · `#/datos` (copias de seguridad).
 - Si se navega atrás durante una partida, se pide confirmación antes de salir.
 
 ### Definición de un juego
@@ -120,9 +124,15 @@ C.register({
 - **Funciones generales:** `C.penalty(nombre)` (tarjeta de castigo o `null`), `C.shareBtn(titulo, lineas, color)` (imagen en canvas → Web Share o descarga), `C.say(texto)` (voz del navegador), `C.sound` (pitidos con WebAudio), `C.buzz` (vibración), `C.sub` y `C.canPlay` (Modo fiesta).
 
 ### Claves de `localStorage` (prefijo `corrillo:`)
-`cfg:<id>` (jugadores, ajustes y categorías conocidas de cada juego) · `used:<clave>` (cartas ya jugadas, ver «Mazos sin repetir») · `custom:<id>` (contenido propio) · `last` (últimos jugadores) · `fav` · `recent` · `night` (marcador) · `pen` (castigos) · `sound`.
+`cfg:<id>` (jugadores, ajustes y categorías conocidas de cada juego) · `used:<clave>` (cartas ya jugadas) · `custom:<id>` (contenido propio; en Verdad o Reto, `{verdad: [], reto: []}`) · `last` · `fav` · `recent` · `night` (marcador) · `pen` · `sound` · `menu` (filtros, sin lista global de jugadores).
 
 Las categorías nuevas no picantes se activan solas en configuraciones ya guardadas gracias a la lista `known` de `cfg:<id>`.
+
+Los ajustes numéricos se normalizan antes de guardarlos y también al cargarlos. Los nombres repetidos tras ignorar mayúsculas y espacios impiden iniciar la partida (salvo las opciones de Al azar). El marcador fusiona esas variantes de nombres anteriores y permite añadir y quitar victorias. `C.pool` elimina coincidencias entre categorías para que no aumenten la probabilidad de una tarjeta.
+
+`library.js` define `C.catalog` (estilo y minutos orientativos con cuatro jugadores), `C.decks(g,s)` (mazos e historial de cada juego), `C.exportData`, `C.readBackup` y `C.importData`. Las copias JSON solo contienen claves de Corrillo, se validan completas antes de restaurarlas y revierten las escrituras ante falta de espacio. No incluyen las fotos ni el contenido de fábrica.
+
+El Modo fiesta usa `s.spicy` (desactivado por defecto) para activar o excluir categorías picantes en toda la sesión; desactivado también evita «Beber» y la regla de beber de Yo nunca. No modifica los ajustes guardados de los juegos. El contenido propio no tiene clasificación automática de tono. Cada subjuego tiene su propia limpieza y botón «Saltar al siguiente juego», que descarta la tarjeta pendiente y cancela temporizadores. La vista previa muestra juegos y categorías efectivos.
 
 ## 6. Los 26 juegos
 
@@ -134,7 +144,7 @@ Las categorías nuevas no picantes se activan solas en configuraciones ya guarda
 | cifras | Impostor de cifras | deducción | 3 | cifras.js | | |
 | espia | El Espía | deducción | 3 | espia.js | | sí |
 | onda | En la misma onda | deducción | 2 | nuevos.js | | sí |
-| verdadreto | Verdad o Reto | preguntas | 2 | verdadreto.js | sí | |
+| verdadreto | Verdad o Reto | preguntas | 2 | verdadreto.js | sí | sí |
 | probable | ¿Quién es más probable…? | preguntas | 3 | tarjetas.js | sí | sí |
 | rompehielos | Rompehielos | preguntas | 2 | tarjetas.js | sí | sí |
 | prefieres | ¿Qué prefieres? | preguntas | 2 | tarjetas.js | sí | sí |
@@ -171,7 +181,7 @@ Además, `fiesta` (**Modo fiesta**, `fiesta.js`) está registrado como juego ocu
 
 ## 7. Contenido
 
-Unas 2.670 tarjetas en total (recuento de noviembre de 2026). Elementos por banco de `C.content`:
+2.738 entradas en total (recuento de noviembre de 2026; cada pareja cuenta como una entrada y las coincidencias entre categorías se cuentan en cada categoría). Elementos por banco de `C.content`:
 
 | Banco | N.º | Formato de cada elemento |
 |---|---|---|
@@ -179,8 +189,8 @@ Unas 2.670 tarjetas en total (recuento de noviembre de 2026). Elementos por banc
 | impostorPares | 48 | `'palabra A|palabra B'` |
 | mentiroso | 104 | `'pregunta normal|pregunta distinta'` (respuestas que puedan parecerse) |
 | espia | 152 | `'lugar'` |
-| cifras | 48 parejas | `[pregA, respA, unidadA, pregB, respB, unidadB, min, max]` (min y max solo para años) |
-| estimaciones | 34 | `[pregunta, respuesta, unidad, min, max]` |
+| cifras | 60 parejas | `[pregA, respA, unidadA, pregB, respB, unidadB, min, max]` (min y max solo para años) |
+| estimaciones | 54 | `[pregunta, respuesta, unidad, min, max]` |
 | precios | 70 | `[título, precio, unidad, 0, 0, emoji, detalle, rutaFoto?]` |
 | verdadreto | 94 + 80 | `{ verdad: {cat: [...]}, reto: {cat: [...]} }`; `{j}` = otro jugador |
 | probable | 125 | frase sin el encabezado «¿Quién es más probable que…» |
@@ -195,13 +205,17 @@ Unas 2.670 tarjetas en total (recuento de noviembre de 2026). Elementos por banc
 | prohibidas | 94 | `'PALABRA|vetada1,vetada2,…'` |
 | yonunca | 102 | frase sin «Yo nunca» |
 | cinco | 97 | consigna sin «Di tres» |
-| quienlodijo | 66 | pregunta |
+| quienlodijo | 86 | pregunta |
 | conocemos | 68 | `'pregunta con {n}|opción A|opción B'` |
 | onda | 72 | `'extremo izquierdo|extremo derecho'` |
-| castigos | 50 | `{ suaves, retos, beber }` |
+| castigos | 66 | `{ suaves, retos, beber }` |
 | creditos | 67 | `[ruta, qué es, autor, licencia, url]` (no es un banco de juego) |
 
 Todos los bancos (salvo `impostorPares`, `verdadreto` y los numéricos) son objetos `{ categoría: [elementos] }`.
+
+La cuarta tanda añade 12 parejas de cifras, 20 estimaciones, 10 afirmaciones de Verdad o invento, 20 preguntas de Quién lo dijo y 16 castigos sin alcohol. `invento` tenía realmente 84 tarjetas antes de esta tanda, aunque el documento decía 94; ahora sí son 94. Se sustituyó el Socorrista duplicado en la categoría Oficios de Charadas por Relojero. Algunas coincidencias entre categorías son deliberadas (Mago, Mimo, Influencer o Tiburón); el pool las cuenta una sola vez.
+
+`C.sources` registra 54 preguntas o afirmaciones de esta ampliación con `{bank, question, urls, checked}`. Sus fuentes son NASA, CERN, National Park Service, la Torre Eiffel y la Ópera de Sídney. Se muestran en los resultados de estimaciones, subastas y Verdad o invento cuando están disponibles. La fecha de consulta es 2026-11-13. Los datos anteriores aún no tienen una auditoría retrospectiva completa: no dar por verificados sus valores ni asignarles una fecha de revisión inventada.
 
 ### Tipos de juego y tono
 - **De fiesta** (rápidos, gamberros, picante opcional): Verdad o Reto, Yo nunca, ¿Quién es más probable…?, Es un 10 pero…, ¿Detallazo o lo mínimo?, ¿Qué prefieres?, ¿Quién lo dijo?, Apuesto a que…, La Bomba, 5 segundos, Charadas, Palabras prohibidas. Varios tienen la categoría «🎉 De fiesta» (no picante).
@@ -222,18 +236,17 @@ Todos los bancos (salvo `impostorPares`, `verdadreto` y los numéricos) son obje
 67 de los 70 artículos tienen foto de Wikimedia Commons (dominio público, CC0 o CC BY/BY-SA), redimensionada a 640×400 como máximo en `img/precios/` (2,4 MB en total). Sin foto, con su emoji: «Facebook compra WhatsApp», «Fichaje de Coutinho» y «Rodar Paranormal Activity». Criterio: **sin retratos de personas reales ni logotipos protagonistas**; para fichajes y compras, imágenes genéricas (estadio, objeto relacionado). La atribución que exigen las licencias está en `js/content/creditos.js` y se muestra en `#/creditos`. Para añadir una foto: guardarla en `img/precios/`, ponerla como octavo elemento del artículo, añadir su crédito en `creditos.js` y su ruta a `FILES` en `sw.js`. Al descargar de Commons, pedir miniaturas de tamaño estándar (p. ej. 500 px): los tamaños no estándar devuelven error 429.
 
 ### Sin verificar de forma expresa
-Sergio lo ha probado en su móvil sin detectar problemas, pero no se ha comprobado una por una cada función: selector de dedos multitáctil (Al azar), inclinación en Charadas (en iPhone exige permiso; el sentido del eje puede necesitar ajuste), voz de Hombres Lobo, vibración, compartir resultado como imagen, instalación como app y uso sin conexión, y `servir.bat`.
+Sergio ha probado la versión anterior en su móvil sin detectar problemas. Siguen pendientes las pruebas específicas de selector de dedos multitáctil, inclinación en Charadas (en iPhone exige permiso), voz de Hombres Lobo, vibración, compartir resultado como imagen, instalación y uso sin conexión en móviles reales, y `servir.bat`. El arranque sin conexión y la recuperación ante errores de servidor sí se comprueban ahora en Chrome de escritorio con tamaño de móvil.
 
 ### Limitaciones conocidas
-- El marcador de la noche identifica a los jugadores por nombre exacto («Ana» ≠ «ana»).
-- «Verdad o Reto» no admite contenido propio (su banco tiene dos niveles).
-- En Modo fiesta cada juego usa las categorías guardadas en su propia pantalla; no hay ajuste global de picante.
-- Bancos más cortos: `estimaciones` (34), `cifras` (48 parejas), `castigos` (50), `quienlodijo` (66).
+- Los tiempos del catálogo son orientativos; cambian según el grupo y los ajustes.
+- El control de picante no clasifica automáticamente las preguntas o castigos escritos por el grupo.
+- Los datos históricos anteriores a la cuarta tanda no tienen todos sus enlaces y fechas de revisión registrados.
 - `CONTEXT.md` es público en el repositorio (incluye el nombre de pila del propietario y la ruta local).
 
-### Ideas propuestas y no hechas
-- **Calidad:** un comprobador de formato del contenido en `tests/` (dilemas sin `|`, «V/F» mal puestos, `{n}` ausente, duplicados).
-- **Ajustes:** interruptor global de picante en el Modo fiesta; marcador que no distinga mayúsculas ni espacios; contenido propio en Verdad o Reto; ver y reiniciar desde la configuración cuántas preguntas quedan sin jugar (`C.unplayed`, `C.forget`).
+### Mejoras incorporadas e ideas pendientes
+- **Calidad ya incorporada:** comprobador de formatos, duplicados por categoría, recuentos, fuentes, catálogo y archivos de caché; regresiones de lógica, interfaz y uso sin conexión. GitHub Actions ejecuta estas pruebas y una prueba de humo breve en cada push a `main` y cada PR. El humo admite `--seed`, `--steps` y `--variants`.
+- **Ajustes ya incorporados:** picante de fiesta, edición y normalización del marcador, contenido propio en Verdad o Reto, historial visible y reiniciable, filtros de juegos y copias JSON.
 - **Estética:** tema oscuro, animaciones (giro de carta, confeti, temblor de la bomba), ilustraciones propias en lugar de emojis, sonidos con más carácter, avatares de color por jugador.
 - **Juegos nuevos (reglas genéricas, nombre y textos propios):** «Solo respuestas incorrectas», «Dibujo a ciegas», «Cita, boda o huida» (picante), más papeles en Hombres Lobo. Otros de Splash tienen reglas no públicas o requieren modo online.
 
@@ -254,3 +267,4 @@ Sergio lo ha probado en su móvil sin detectar problemas, pero no se ha comproba
 4. Ocho juegos nuevos, Modo fiesta, castigos, contenido propio, favoritos, marcador de la noche, compartir resultado, y mejoras en Impostor, Hombres Lobo, Charadas y A ojo.
 5. Noviembre de 2026 (Claude Code): fotos de Precio justo y página de créditos; Precio justo pasa de 28 a 70 artículos; En la misma onda con rueda semicircular; A ojo e Impostor de cifras con preguntas de nivel medio-alto; revisión de todo el contenido y ampliación (`ampliacion.js`) con categorías nuevas.
 6. Noviembre de 2026: git y publicación (repositorio público R4INYIS/corrillo + GitHub Pages); prueba en móvil real; escalas de En la misma onda reescritas con un solo eje; mazos que solo guardan una carta como jugada al terminar su ronda, con botón «Saltar» en los juegos donde tiene sentido; A ojo, Precio justo e Impostor de cifras puntúan por diferencia simple y muestran los resultados en escala lineal ampliada con la distancia de cada jugador.
+7. Noviembre de 2026: corrección de ajustes al reducir jugadores y de la caché ante errores HTTP; filtros del menú; picante, vista previa y salto de juego en fiesta; marcador normalizado y editable; historial visible; contenido propio en Verdad o Reto; copias JSON; 78 entradas nuevas con fuentes de sus datos y pruebas automáticas de lógica, interfaz y PWA. La revisión específica de funciones móviles y los cambios estéticos quedan para la siguiente fase.
