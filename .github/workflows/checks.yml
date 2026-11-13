@@ -29,6 +29,9 @@ jobs:
           python -m pip install -r tests/requirements.txt
           python -m playwright install --with-deps chromium
       - name: Regresiones de interfaz y uso sin conexión
-        run: python tests/regression.py
+        run: |
+          python tests/regression.py
+          python tests/audit_regression.py
+          python tests/offline_update.py
       - name: Humo de todos los juegos con semilla fija
         run: python tests/smoke.py --seed 20261113 --variants 1 --steps 40

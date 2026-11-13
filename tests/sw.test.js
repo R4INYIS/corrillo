@@ -13,7 +13,7 @@ function worker(fetcher) {
     async addAll() {},
   };
   const context = {
-    URL, Set, Response, fetch: fetcher,
+    URL, Set, Response, Request, fetch: fetcher,
     caches: { open: async () => cache, keys: async () => ['corrillo-v0', context.cacheVersion, 'otra-app'], delete: async (key) => deleted.push(key) },
     self: { registration: { scope: SCOPE }, addEventListener: (name, fn) => (handlers[name] = fn), skipWaiting: () => state.skipped++, clients: { claim: async () => state.claimed++ } },
   };
@@ -35,9 +35,9 @@ test('un error HTTP conserva la copia buena y la devuelve', async () => {
   assert.equal(await w.saved.get(SCOPE + 'css/styles.css').text(), 'css correcto');
 });
 
-test('sin copia, un 503 se devuelve sin guardarlo', async () => {
+test('sin copia, un script no se sustituye por otra publicación de la red', async () => {
   const w = worker(async () => new Response('error', { status: 503 }));
-  assert.equal((await w.request('js/core/core.js')).status, 503);
+  assert.equal((await w.request('js/core/core.js')).type, 'error');
   assert.equal(w.saved.size, 0);
 });
 
@@ -53,7 +53,7 @@ test('sin conexión se devuelve HTML solo para navegación, nunca para un script
 test('un fallo al escribir la caché no impide usar una respuesta válida', async () => {
   const w = worker(async () => new Response('nuevo'));
   w.state.failPut = true;
-  assert.equal(await (await w.request('css/styles.css')).text(), 'nuevo');
+  assert.equal(await (await w.request('img/precios/ps5.jpg')).text(), 'nuevo');
 });
 
 test('activar borra solo versiones antiguas de Corrillo y la actualización espera', async () => {

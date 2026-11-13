@@ -13,9 +13,21 @@
     aojo: ['deduccion', 15], precio: ['deduccion', 15], subasta: ['deduccion', 15], bomba: ['accion', 5], charadas: ['accion', 10], prohibidas: ['accion', 10], cinco: ['accion', 5], contrasena: ['deduccion', 10], azar: ['accion', 5],
   };
   C.styles = { conversacion: 'Conversación', deduccion: 'Deducción', accion: 'Acción' };
+  C.recommended = (game) => ({ lobos: '7–12', impostor: '4–10', espia: '4–10', conocemos: '3–6', quienlodijo: '4–8', pistaunica: '3–8', charadas: '4–12', prohibidas: '4–12', contrasena: '3–8', bomba: '4–12', azar: 'cualquier grupo', fiesta: '4–10' }[game.id] || (['rompehielos', 'prefieres', 'diez', 'detallazo', 'yonunca', 'probable'].includes(game.id) ? '3–12' : '4–8'));
+  C.intents = { center: 'Móvil en el centro', pass: 'Pasar el móvil', noTyping: 'Sin escribir', coop: 'Cooperativo', noElimination: 'Sin eliminados', large: 'Grupos grandes' };
+  C.gameTraits = (game) => {
+    const id = game.id, traits = [];
+    if (['rompehielos', 'prefieres', 'diez', 'detallazo', 'yonunca', 'invento', 'bomba', 'cinco', 'azar', 'subasta', 'ranking', 'probable'].includes(id)) traits.push('center');
+    if (['impostor', 'espia', 'mentiroso', 'cifras', 'lobos', 'onda', 'quienlodijo', 'conocemos', 'aojo', 'precio', 'probable', 'pistaunica'].includes(id)) traits.push('pass');
+    if (!['quienlodijo', 'pistaunica', 'onda'].includes(id)) traits.push('noTyping');
+    if (['contrasena', 'onda', 'pistaunica', 'ranking'].includes(id)) traits.push('coop');
+    if (id !== 'lobos') traits.push('noElimination');
+    if (['rompehielos', 'prefieres', 'diez', 'detallazo', 'yonunca', 'bomba', 'azar', 'probable', 'charadas', 'prohibidas', 'contrasena'].includes(id)) traits.push('large');
+    return traits;
+  };
   C.matches = (g, f) => {
     const meta = C.catalog[g.id];
-    return meta && (!f.players || C.canPlay(g, Number(f.players))) && (!f.minutes || meta[1] <= Number(f.minutes)) && (!f.style || meta[0] === f.style);
+    return meta && (!f.players || C.canPlay(g, Number(f.players))) && (!f.minutes || meta[1] <= Number(f.minutes)) && (!f.style || meta[0] === f.style) && (!f.intent || C.gameTraits(g).includes(f.intent));
   };
 
   C.customBank = (g, kind) => kind ? C.content[g.custom.bank][kind] : C.content[g.custom.bank];
@@ -25,6 +37,7 @@
   C.applyCustom = (g, value) => {
     if (g.custom.dual) ['verdad', 'reto'].forEach((kind) => (C.customBank(g, kind).custom = value[kind] || []));
     else C.customBank(g).custom = value;
+    if (C.invalidateCatalogue) C.invalidateCatalogue();
   };
   C.hasCustom = (g) => g.custom && (g.custom.dual ? Object.values(C.customValue(g)).some((a) => a.length) : C.customValue(g).length > 0);
   C.parseCustom = (g, text) => {
@@ -43,7 +56,7 @@
     if (['lobos', 'azar', 'fiesta'].includes(g.id)) return [];
     if (g.id === 'verdadreto') return ['verdad', 'reto'].map((kind) => ({ key: 'vr-' + kind, label: kind === 'verdad' ? 'Verdades' : 'Retos', pool: C.pool(C.content.verdadreto[kind], s.cats) }));
     if (g.id === 'impostor' && s.mode === 'parecida') return [{ key: 'impostor-pares', label: 'Parejas', pool: C.content.impostorPares }];
-    const key = g.id, bank = { precio: 'precios', contrasena: 'charadas' }[key] || key;
+    const key = g.id, bank = { precio: 'precios' }[key] || key;
     const pool = ['aojo', 'subasta'].includes(key) ? C.estimatePool(s).filter((x) => key !== 'subasta' || x[2] || x[3] < 500) : C.pool(C.content[bank], s.cats);
     return [{ key, label: 'Tarjetas', pool, repeat: key === 'onda' }];
   };
@@ -79,6 +92,7 @@
       if (value.known != null && !strings(value.known, 100, 80)) fail(key);
       for (const [name, val] of Object.entries(value.s)) {
         if (name === 'cats') { if (!strings(val, 100, 80)) fail(key); continue; }
+        if (name === 'teamMap') { if (!Array.isArray(val) || val.length > 20 || val.some((v) => !Number.isInteger(v) || v < 0 || v > 9)) fail(key); continue; }
         const setting = (g.settings || []).find((s) => s.key === name);
         if (!setting || (setting.type === 'toggle' ? typeof val !== 'boolean' : setting.type === 'step' ? !Number.isFinite(val) : !setting.options.some(([v]) => v === val))) fail(key);
       }
@@ -93,13 +107,21 @@
         ['verdad', 'reto'].forEach((kind) => check(value[kind]));
       } else check(value);
     } else if (key.startsWith('used:')) {
-      const keys = C.games.filter((game) => !['lobos', 'azar', 'fiesta', 'verdadreto'].includes(game.id)).map((game) => game.id).concat('impostor-pares', 'vr-verdad', 'vr-reto');
+      const keys = C.games.filter((game) => !['lobos', 'azar', 'fiesta', 'verdadreto'].includes(game.id)).map((game) => game.id).concat('impostor-pares', 'vr-verdad', 'vr-reto', 'facts', 'cuatro');
       if (!keys.includes(key.slice(5)) || !strings(value, 20000, 32)) fail(key);
     } else if (key === 'night') {
       if (!plain(value) || Object.entries(value).some(([name, n]) => !name.trim() || name.length > 80 || !Number.isInteger(n) || n < 0 || n > 1000000)) fail(key);
     } else if (key === 'last') { if (!strings(value, 20, 16)) fail(key); }
     else if (['fav', 'recent'].includes(key)) { if (!strings(value, 100, 80) || value.some((id) => !C.games.some((game) => game.id === id))) fail(key); }
-    else if (key === 'sound') { if (typeof value !== 'boolean') fail(key); }
+    else if (['sound', 'vibration', 'sharedFacts', 'factsMigration'].includes(key)) { if (typeof value !== 'boolean') fail(key); }
+    else if (key === 'groups') {
+      if (!Array.isArray(value) || value.length > 100 || value.some((v) => !plain(v) || typeof v.name !== 'string' || v.name.length > 40 || !strings(v.players, 20, 16))) fail(key);
+    } else if (key === 'filters') {
+      if (!strings(value, 6, 30) || value.some((v) => !['materials', 'apps', 'thirdParty', 'contact', 'effort', 'exposure'].includes(v))) fail(key);
+    } else if (key === 'hiddenCards') { if (!strings(value, 20000, 80)) fail(key); }
+    else if (key === 'feedback') {
+      if (!Array.isArray(value) || value.length > 500 || value.some((v) => !plain(v) || typeof v.id !== 'string' || v.id.length > 100 || typeof v.reason !== 'string' || v.reason.length > 100 || typeof v.comment !== 'string' || v.comment.length > 1500 || typeof v.game !== 'string' || v.game.length > 80 || typeof v.date !== 'string' || v.date.length > 40)) fail(key);
+    }
     else if (key === 'pen') {
       if (!plain(value) || typeof value.on !== 'boolean' || !strings(value.lists, 3, 10) || value.lists.some((k) => !['suaves', 'retos', 'beber'].includes(k)) || !strings(value.custom, 2000, 500)) fail(key);
     } else if (key === 'menu') {
@@ -108,6 +130,10 @@
   }
   C.exportData = () => {
     const data = Object.create(null);
+    if (C.guest) {
+      C.guestEntries().forEach(([key, value]) => { if (key !== 'menu') { validEntry(key, value); data[key] = value; } });
+      return { app: 'Corrillo', version: 1, exportedAt: new Date().toISOString(), data };
+    }
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key.startsWith('corrillo:') && key !== 'corrillo:menu') {
@@ -174,6 +200,8 @@
   C.sourceNote = (question) => {
     const source = (C.sources || []).find((s) => s.question === question);
     if (!source) return null;
-    return C.h('p', { class: 'muted small source' }, 'Dato aproximado cuando se indica. ', source.urls.map((url, i) => [i ? ' · ' : '', C.h('a', { href: url, target: '_blank', rel: 'noopener' }, 'Fuente' + (source.urls.length > 1 ? ' ' + (i + 1) : ''))]), ' · Revisado: ' + source.checked);
+    return C.h('div', { class: 'muted small source' }, source.precision && C.h('p', null, source.precision),
+      source.asof && C.h('p', null, 'Referencia del dato: ' + source.asof),
+      source.urls.map((url, i) => [i ? ' · ' : '', C.h('a', { href: url, target: '_blank', rel: 'noopener' }, 'Fuente' + (source.urls.length > 1 ? ' ' + (i + 1) : ''))]), ' · Revisado: ' + source.checked);
   };
 })(Corrillo);

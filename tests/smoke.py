@@ -21,6 +21,7 @@ async def main():
         b=await p.chromium.launch(channel=None if args.channel=='chromium' else args.channel)
         ctx=await b.new_context(viewport={'width':390,'height':844},device_scale_factor=2,has_touch=True,is_mobile=True)
         pg=await ctx.new_page(); errs=[]
+        await pg.clock.install()
         pg.on('pageerror',lambda e:errs.append(('pageerror',str(e))))
         pg.on('console',lambda m:errs.append(('console',m.text)) if m.type=='error' else None)
         await pg.goto(URL); await pg.wait_for_selector('.gcard')
@@ -38,6 +39,7 @@ async def main():
                 if variant:
                     for _ in range(variant*3):
                         els=await pg.query_selector_all('.setup .chip, .setup .switch, .setup .stepper button:not([disabled])')
+                        els=[x for x in els if await x.is_visible()]
                         if els: await random.choice(els).click()
                 pass
                 dis=await pg.evaluate('document.querySelector(".bar .btn").disabled')
@@ -47,13 +49,17 @@ async def main():
                 await pg.click('.bar .btn'); await pg.wait_for_selector('.play', timeout=5000)
                 seen=set()
                 for step in range(args.steps):
-                    for inp in await pg.query_selector_all('.stage input[type=text]'): await inp.fill('resp')
+                    dialog=pg.locator('dialog[open]')
+                    if await dialog.count():
+                        await dialog.last.get_by_role('button', name='Cerrar', exact=True).click()
+                    for inp in await pg.query_selector_all('.stage input[type=text]'):
+                        if await inp.is_visible(): await inp.fill('resp')
                     for tr in await pg.query_selector_all('.stage .dial-track, .stage .wl.live'):
                         bb=await tr.bounding_box(); await pg.mouse.click(bb['x']+bb['width']*random.random(), bb['y']+30)
                     btns=await pg.query_selector_all('.stage button:not([disabled]), .stage .spinbox')
                     btns=[x for x in btns if await x.is_visible()]
                     if not btns: 
-                        await pg.wait_for_timeout(300); continue
+                        await pg.clock.fast_forward(5000); continue
                     labels=[(await x.inner_text()).strip() for x in btns]
                     cand=[(x,l) for x,l in zip(btns,labels) if l not in ('Ajustes','Menú','Terminar fiesta','📤 Compartir resultado')]
                     x,l=random.choice(cand or list(zip(btns,labels)))

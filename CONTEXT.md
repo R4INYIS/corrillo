@@ -8,7 +8,7 @@ Documento de traspaso para continuar el desarrollo desde Claude Code (u otro asi
 
 - **Propietario:** Sergio. Carpeta del proyecto: `E:\sergio\Programacion\corrillo` (Windows).
 - **Público objetivo:** estudiantes universitarios españoles. Todo el texto está en español de España.
-- **Estado:** 26 juegos, Modo fiesta y funciones generales. Incluye filtros del menú, copias de seguridad, historial visible, marcador editable y contenido propio en Verdad o Reto. Pruebas reproducibles en `tests/` y comprobaciones automáticas en GitHub Actions. Sergio ha probado la versión anterior en su móvil; las funciones nuevas se verifican en Chrome con tamaño de móvil.
+- **Estado:** 28 juegos, Modo fiesta y la auditoría acordada en `AUDITORIA_PLAN.md` implementada. Incluye filtros del menú, copias de seguridad, historial visible, marcador editable y contenido propio en Verdad o Reto. Pruebas reproducibles en `tests/` y comprobaciones automáticas en GitHub Actions. Sergio ha probado la versión anterior en su móvil; las funciones nuevas se verifican en Chrome con tamaño de móvil.
 - **Uso:** personal y no comercial, como alternativa propia a las apps de pago de este estilo.
 - **Publicada:** repositorio público https://github.com/R4INYIS/corrillo (cuenta personal, no la de la empresa) y web en GitHub Pages: https://r4inyis.github.io/corrillo/ (HTTPS, se actualiza con cada push a `main`).
 
@@ -16,11 +16,11 @@ Documento de traspaso para continuar el desarrollo desde Claude Code (u otro asi
 
 1. **Web estática sin compilación.** HTML, CSS y JavaScript plano. Tiene que funcionar con doble clic en `index.html` (protocolo `file://`). Por eso **no se usan módulos ES, `fetch` de JSON, bundlers ni frameworks**: todo son `<script>` clásicos que cuelgan de un objeto global `Corrillo`.
 2. **Pensada para móvil**, aunque sea web: botones grandes, una columna, sin depender de hover.
-3. **Cada juego gestiona sus propios jugadores y ajustes.** No hay lista global de jugadores. Se guardan por juego en `localStorage`. La única concesión es el botón «Usar los de la última partida».
+3. **Cada juego gestiona sus propios jugadores y ajustes.** No hay lista global de jugadores. Se guardan por juego en `localStorage`. Se pueden importar copias de grupos guardados y usar los de la última partida; siguen siendo listas independientes.
 4. **Contenido apto para todos por defecto, picante opcional.** Las categorías con `spicy: true` vienen desactivadas y se marcan «🌶️ +18». Lo mismo con la lista de castigos «Beber».
 5. **Enfoque universitario:** casi todos los juegos tienen una categoría «🎓 Universidad» y referencias a internet, TikTok y famosos conocidos en España.
 6. **Barra de estimación «futurista»:** escala logarítmica de 0 a 1T con notación americana (K, M, **B** = mil millones, **T** = billón español), que redondea más cuanto mayor es la cifra. La puntuación usa diferencia simple, no logarítmica, y los resultados se ven en escala lineal ampliada.
-7. **Fuera de alcance por ahora:** modo online con salas y servidor, y dominio propio (se publica gratis en GitHub Pages).
+7. **Fuera de alcance por ahora:** modo online con salas y servidor, dominio propio, recuperar partidas y nuevas acciones de deshacer. Feedback local y borrador de issue; sin servidor ni envío automático.
 
 ## 3. Cómo ejecutarla y probarla
 
@@ -35,7 +35,7 @@ Documento de traspaso para continuar el desarrollo desde Claude Code (u otro asi
 | Regresiones de interfaz y PWA | `python tests/regression.py` (Chrome; `pip install -r tests/requirements.txt`) |
 | Prueba de humo | `python tests/smoke.py [id …]` (necesita `pip install playwright` y Chrome). Juega cada juego (o solo los indicados) con ajustes al azar pulsando botones al azar y falla si hay errores de JavaScript. Todos tardan 10–15 minutos |
 
-El service worker (`sw.js`) solo se registra bajo `http(s)`, no en `file://`. Usa red primero y recupera la copia guardada también ante errores HTTP; no guarda respuestas de error ni devuelve HTML en lugar de scripts o imágenes. Solo borra cachés cuyo nombre empieza por `corrillo-v`. **Al añadir o quitar archivos hay que actualizar `FILES` y subir `VERSION`** (ahora `corrillo-v8`). El menú indica cuándo está preparado el modo sin conexión. Las actualizaciones esperan a cerrar la app o a pulsar «Actualizar» desde el menú, sin interrumpir partidas. El arranque sin conexión y la recuperación ante un HTTP 503 se comprueban en Chrome; la instalación real en Android e iPhone sigue pendiente.
+El service worker (`sw.js`) solo se registra bajo `http(s)`, no en `file://`. Sirve una instantánea por versión, fijada mediante hashes SRI; no mezcla scripts de publicaciones distintas. Las fotos son opcionales y tienen alternativa visual. Solo borra cachés cuyo nombre empieza por `corrillo-v`. **Al añadir o quitar archivos hay que actualizar `FILES` y subir `VERSION`** (ahora `corrillo-v9`). Tras el último cambio de recursos ejecutar `node tools/offline.cjs`. El menú indica cuándo está preparado el modo sin conexión. Las actualizaciones esperan a cerrar la app o a pulsar «Actualizar» desde el menú, sin interrumpir partidas. El arranque sin conexión y la recuperación ante un HTTP 503 se comprueban en Chrome; la instalación real en Android e iPhone sigue pendiente.
 
 ## 4. Estructura de archivos
 
@@ -65,7 +65,7 @@ js/content/             Solo datos: palabras, preguntas, retos…
 js/games/               Lógica de los juegos (ver tabla de la sección 6)
 ```
 
-**Orden de carga en `index.html`:** `core.js` → `library.js` → contenido (`deduccion`, `cifras`, `preguntas`, `palabras`, `universidad`, `nuevos`, `ampliacion`, `ampliacion2`, `creditos`) → juegos. Las ampliaciones dependen de los bancos anteriores. El orden de los scripts de juegos es el orden del menú dentro de cada grupo.
+**Orden de carga:** núcleo → `library`, `rules`, `experience`, `catalogue` → bancos originales y ampliaciones → `social`, `revision`, `referencias`, `identities` → juegos originales → `ampliaciones`, `azar`, `fiesta`. `index.html` es la fuente exacta del orden. Los nuevos módulos comunes gestionan reglas, equipos, privacidad, pausa, invitado, etiquetas, editor y feedback.
 
 ## 5. Arquitectura (`js/core/core.js`)
 
@@ -124,23 +124,23 @@ C.register({
 - **Funciones generales:** `C.penalty(nombre)` (tarjeta de castigo o `null`), `C.shareBtn(titulo, lineas, color)` (imagen en canvas → Web Share o descarga), `C.say(texto)` (voz del navegador), `C.sound` (pitidos con WebAudio), `C.buzz` (vibración), `C.sub` y `C.canPlay` (Modo fiesta).
 
 ### Claves de `localStorage` (prefijo `corrillo:`)
-`cfg:<id>` (jugadores, ajustes y categorías conocidas de cada juego) · `used:<clave>` (cartas ya jugadas) · `custom:<id>` (contenido propio; en Verdad o Reto, `{verdad: [], reto: []}`) · `last` · `fav` · `recent` · `night` (marcador) · `pen` · `sound`.
+`cfg:<id>` (jugadores, ajustes y categorías conocidas de cada juego) · `used:<clave>` (cartas ya jugadas) · `custom:<id>` (contenido propio; en Verdad o Reto, `{verdad: [], reto: []}`) · `last` · `fav` · `recent` · `night` (marcador) · `pen` · `sound` · `vibration` · `groups` · `filters` · `hiddenCards` · `feedback` · `sharedFacts` · `factsMigration`. `used:facts` guarda datos compartidos y `used:cuatro` el mazo de cuatro fases.
 
-La búsqueda y los filtros del menú viven solo en memoria: se conservan entre rutas del mismo documento y se reinician al recargar. La antigua clave `menu` se elimina al arrancar y se ignora al restaurar copias anteriores. No se incluyen filtros en las copias nuevas. El menú muestra el número de juegos distintos que coinciden, permite limpiar todos los criterios y ofrece una salida clara cuando no hay resultados.
+La búsqueda y los filtros del menú viven solo en memoria: se conservan entre rutas del mismo documento y se reinician al recargar. La antigua clave `menu` se elimina al arrancar y se ignora al restaurar copias anteriores. No se incluyen los filtros temporales del menú en las copias nuevas; sí las preferencias de contenido. El menú muestra el número de juegos distintos que coinciden, permite limpiar todos los criterios y ofrece una salida clara cuando no hay resultados.
 
 Las categorías nuevas no picantes se activan solas en configuraciones ya guardadas gracias a la lista `known` de `cfg:<id>`.
 
-Excepción: los 16 juegos adicionales de Fiesta usan `optional: true` en sus categorías para conservar la selección rápida anterior hasta que el grupo elija ampliarla. `categoryPresets` permite seleccionar todos los juegos compatibles, solo los rápidos o ninguno.
+Excepción: los juegos adicionales de Fiesta usan `optional: true` en sus categorías para conservar la selección rápida anterior hasta que el grupo elija ampliarla. `categoryPresets` permite seleccionar todos los juegos compatibles, solo los rápidos o ninguno.
 
 Los ajustes numéricos se normalizan antes de guardarlos y también al cargarlos. Los nombres repetidos tras ignorar mayúsculas y espacios impiden iniciar la partida (salvo las opciones de Al azar). El marcador fusiona esas variantes de nombres anteriores y permite añadir y quitar victorias. `C.pool` elimina coincidencias entre categorías para que no aumenten la probabilidad de una tarjeta.
 
 `library.js` define `C.catalog` (estilo y minutos orientativos con cuatro jugadores), `C.decks(g,s)` (mazos e historial de cada juego), `C.exportData`, `C.readBackup` y `C.importData`. Las copias JSON solo contienen claves de Corrillo, se validan completas antes de restaurarlas y revierten las escrituras ante falta de espacio. No incluyen las fotos ni el contenido de fábrica.
 
-El Modo fiesta admite los 26 juegos del catálogo. Los que tienen `party: true` alternan tras `s.limit` turnos; los demás completan su ronda o partida con los ajustes guardados y continúan desde `ctx.endBar()`. Al azar no tiene un final automático: se usa el botón de salto cuando el grupo termine. `s.spicy` (desactivado por defecto) controla las categorías picantes de toda la sesión; desactivado también evita «Beber» y la regla de beber de Yo nunca. No modifica los ajustes guardados de los juegos. El contenido propio no tiene clasificación automática de tono. Cada subjuego tiene su propia limpieza y botón «Saltar al siguiente juego», que descarta la tarjeta pendiente y cancela temporizadores y narración. La vista previa muestra juegos, formato y categorías efectivos.
+El Modo fiesta admite los 28 juegos: rápida/completa, oral/privado y uso mínimo del móvil. En rápida las actividades usan `s.limit`; las competiciones completan ciclos equitativos. Admite final por juegos/ciclos, rebarajado sin repetición inmediata y resumen con puntos parciales sin victorias incompletas. Al azar no tiene un final automático: se usa el botón de salto cuando el grupo termine. `s.spicy` (desactivado por defecto) controla las categorías picantes de toda la sesión; desactivado también evita «Beber» y la regla de beber de Yo nunca. No modifica los ajustes guardados de los juegos. El contenido propio no tiene clasificación automática de tono. Cada subjuego tiene su propia limpieza y botón «Saltar al siguiente juego», que descarta la tarjeta pendiente y cancela temporizadores y narración. La vista previa muestra juegos, formato y categorías efectivos.
 
 Las confirmaciones usan `<dialog>` modal, bloquean la interacción con el fondo, mantienen Tab dentro de sus botones, admiten Escape y restauran el foco al cerrar. El dial numérico y la rueda declaran sus límites y valor para accesibilidad y admiten flechas, Inicio y Fin sin desplazar la página. Los botones del dial usan clic sintético para teclado y tecnologías de apoyo, evitando contar dos veces los toques normales. Esto no sustituye las pruebas pendientes con lectores de pantalla y móviles reales.
 
-## 6. Los 26 juegos
+## 6. Los 28 juegos
 
 | id | Nombre | Grupo | Mín. | Archivo | Turnos rápidos en Fiesta | Contenido propio |
 |---|---|---|---|---|---|---|
@@ -166,12 +166,14 @@ Las confirmaciones usan `<dialog>` modal, bloquean la interacción con el fondo,
 | subasta | Subasta de cifras | palabras | 2 | cifras.js | | |
 | bomba | La Bomba | palabras | 2 | rapidez.js | sí | sí |
 | charadas | Charadas | palabras | 2 | rapidez.js | | sí |
-| prohibidas | Palabras prohibidas | palabras | 2 | rapidez.js | | |
+| prohibidas | Palabras prohibidas | palabras | 2 | rapidez.js | | sí |
 | cinco | 5 segundos | palabras | 2 | nuevos.js | sí | sí |
-| contrasena | Contraseña | palabras | 2 | nuevos.js | | |
+| contrasena | Contraseña | palabras | 2 | nuevos.js | | sí |
 | azar | Al azar (dedos, flecha, ruleta) | palabras | 0 | azar.js | | |
+| ranking | Ranking a ciegas | preguntas | 1 | ampliaciones.js | | sí |
+| pistaunica | Pista única | palabras | 2 | ampliaciones.js | | sí |
 
-Además, `fiesta` (**Modo fiesta**, `fiesta.js`) está registrado como juego oculto: sus «categorías» son los 26 juegos visibles. La marca `party: true` solo distingue los que admiten rotación por turnos cortos; todos se pueden añadir a Fiesta.
+Además, `fiesta` (**Modo fiesta**, `fiesta.js`) está registrado como juego oculto: sus «categorías» son los 28 juegos visibles. La marca `party: true` solo distingue los que admiten rotación por turnos cortos; todos se pueden añadir a Fiesta.
 
 **Equivalencias con Splash** (nombres cambiados a propósito): A ojo = Circa · Impostor de cifras = Circa Impostor · ¿Detallazo o lo mínimo? = Princess Treatment · ¿Verdad o invento? = Fake or Fact · Apuesto a que… = Bet Buddy · Palabras prohibidas = Taboom · Al azar = Chooser · Rompehielos = 100 preguntas · En la misma onda = Mind Match (reglas tipo «Wavelength», definidas por Sergio) · Contraseña = «tabú inverso».
 
@@ -180,14 +182,14 @@ Además, `fiesta` (**Modo fiesta**, `fiesta.js`) está registrado como juego ocu
 - **Hombres Lobo:** sin narrador. Cada noche el móvil pasa por todos los vivos y todos tocan un nombre para no delatar su papel. Papeles opcionales: vidente, protector, bruja, cazador, cupido. La bruja usa la poción de vida a ciegas (no ve a quién atacan). Las muertes en cadena (enamorados, disparo del cazador) las resuelve la función `die()`.
 - **A ojo / Precio justo / Impostor de cifras:** se estima en la barra logarítmica, pero **gana quien tenga la menor diferencia simple** |estimación − respuesta| (decisión de Sergio, noviembre de 2026). En la pantalla de resultados la barra se amplía con animación a **escala lineal** entre la cifra más baja y la más alta, y cada jugador ve a qué distancia se quedó.
 - **Subasta de cifras:** se sube la apuesta («son al menos X») o se desafía al anterior. Si la cifra real ≥ apuesta, gana quien apostó.
-- **En la misma onda:** cooperativo, con una rueda semicircular (SVG) y aguja arrastrable. Franja estrecha: distancia al centro ≤3 → 4 puntos, ≤9 → 3, ≤15 → 2, más → 0. Cada escala es **un solo eje** con dos extremos opuestos de la misma cualidad («Barato ↔ Caro», «Mal regalo ↔ Buen regalo»), subjetiva para que haya debate. No mezclar dos ideas distintas en una escala (se quitó «Placer culpable ↔ Orgullo total») ni usar escalas puramente físicas. Las escalas pueden repetirse entre partidas y quien da la pista puede pedir «otra escala».
+- **En la misma onda:** cooperación por defecto o competición individual (mínimo tres), con media de los puntos de los receptores para el emisor y ciclos completos; con una rueda semicircular (SVG) y aguja arrastrable. Franja estrecha: distancia al centro ≤3 → 4 puntos, ≤9 → 3, ≤15 → 2, más → 0. Cada escala es **un solo eje** con dos extremos opuestos de la misma cualidad («Barato ↔ Caro», «Mal regalo ↔ Buen regalo»), subjetiva para que haya debate. No mezclar dos ideas distintas en una escala (se quitó «Placer culpable ↔ Orgullo total») ni usar escalas puramente físicas. Las escalas pueden repetirse entre partidas y quien da la pista puede pedir «otra escala».
 - **¿Cuánto nos conocemos?:** preguntas de dos opciones; el protagonista puntúa si acierta al menos la mitad.
-- **Charadas:** ajuste opcional para marcar inclinando el móvil (`deviceorientation`, eje beta).
-- **Votaciones:** en Impostor, Espía y Lobos se vota a mano alzada y se toca al más votado. Solo «¿Quién es más probable…?» tiene voto secreto en el móvil.
+- **Charadas:** inclinación opcional con calibración y botones. Incluye **Cuatro rondas por equipos**: descripción, una palabra, mímica y sonidos; mismo mazo en las cuatro fases, 60 s por equipo, el siguiente equipo comienza tras agotar el mazo. Pasar no resta y devuelve la carta a pendientes. Aportaciones de sesión y guardado expreso opcional.
+- **Votaciones:** Impostor, Espía y Lobos admiten voto público o secreto, abstención, sin autovoto y un desempate. Si persiste el empate, no se expulsa y continúa la discusión.
 
 ## 7. Contenido
 
-2.738 entradas en total (recuento de noviembre de 2026; cada pareja cuenta como una entrada y las coincidencias entre categorías se cuentan en cada categoría). Elementos por banco de `C.content`:
+Elementos por banco de `C.content`. No sumar como contenido exclusivo: existen bancos compartidos y copias independientes para contenido propio.
 
 | Banco | N.º | Formato de cada elemento |
 |---|---|---|
@@ -215,13 +217,18 @@ Además, `fiesta` (**Modo fiesta**, `fiesta.js`) está registrado como juego ocu
 | conocemos | 68 | `'pregunta con {n}|opción A|opción B'` |
 | onda | 72 | `'extremo izquierdo|extremo derecho'` |
 | castigos | 66 | `{ suaves, retos, beber }` |
+| ranking | 240 | elemento a colocar en el ranking |
+| pistaunica | 270 | palabra; banco propio separado de Charadas |
+| contrasena | 270 | palabra; banco propio separado de Charadas |
 | creditos | 67 | `[ruta, qué es, autor, licencia, url]` (no es un banco de juego) |
 
 Todos los bancos (salvo `impostorPares`, `verdadreto` y los numéricos) son objetos `{ categoría: [elementos] }`.
 
 La cuarta tanda añade 12 parejas de cifras, 20 estimaciones, 10 afirmaciones de Verdad o invento, 20 preguntas de Quién lo dijo y 16 castigos sin alcohol. `invento` tenía realmente 84 tarjetas antes de esta tanda, aunque el documento decía 94; ahora sí son 94. Se sustituyó el Socorrista duplicado en la categoría Oficios de Charadas por Relojero. Algunas coincidencias entre categorías son deliberadas (Mago, Mimo, Influencer o Tiburón); el pool las cuenta una sola vez.
 
-`C.sources` registra 54 preguntas o afirmaciones de esta ampliación con `{bank, question, urls, checked}`. Sus fuentes son NASA, CERN, National Park Service, la Torre Eiffel y la Ópera de Sídney. Se muestran en los resultados de estimaciones, subastas y Verdad o invento cuando están disponibles. La fecha de consulta es 2026-11-13. Los datos anteriores aún no tienen una auditoría retrospectiva completa: no dar por verificados sus valores ni asignarles una fecha de revisión inventada.
+`C.sources` cubre los 338 datos factuales de fábrica con `{bank, question, urls, checked, asof, precision}`: 120 preguntas de cifras, 54 estimaciones, 70 precios y 94 V/F. `revision.js` y `referencias.js` aplican correcciones editoriales antes de cargar las identidades. Los resultados de todos los juegos factuales muestran sus referencias. V/F se distribuye entre seis categorías con aproximadamente mitad verdaderas y mitad falsas; astronomía tiene categoría propia.
+
+`identities.js` conserva IDs permanentes y alias de texto anterior. Al editar contenido, ejecutar `node tools/catalogue.cjs` antes de regenerar la integridad offline. `C.factsOf` reconoce también paráfrasis del mismo dato y `factsMigration` evita reimportar el historial después de un reinicio expreso. El historial compartido viene activado por defecto y admite alternativa independiente.
 
 ### Tipos de juego y tono
 - **De fiesta** (rápidos, gamberros, picante opcional): Verdad o Reto, Yo nunca, ¿Quién es más probable…?, Es un 10 pero…, ¿Detallazo o lo mínimo?, ¿Qué prefieres?, ¿Quién lo dijo?, Apuesto a que…, La Bomba, 5 segundos, Charadas, Palabras prohibidas. Varios tienen la categoría «🎉 De fiesta» (no picante).
@@ -232,7 +239,7 @@ La cuarta tanda añade 12 parejas de cifras, 20 estimaciones, 10 afirmaciones de
 - **Datos reales:** las afirmaciones de «¿Verdad o invento?», las cifras y los precios se eligieron por ser hechos estables y comprobables. Al añadir más, verificarlos; evitar datos discutidos o que cambien cada año.
 - **Nivel de A ojo y cifras:** medio-alto. La gente debe saber más o menos por dónde va, pero no la cifra exacta. Nada de «¿cuántas horas tiene un día?», semanas del año, casillas del ajedrez, etc.
 - **¿Verdad o invento?:** se quitaron los mitos que ya conoce todo el mundo (10 % del cerebro, memoria del pez, cascos vikingos…); priorizar datos poco conocidos.
-- **Cifras que caducan:** usuarios de YouTube (2.700 M), Instagram y WhatsApp (3.000 M), habitantes (España 49 M, mundo 8.200 M), artículos de la Wikipedia en inglés (7 M). Son aproximadas a 2026.
+- **Cifras que caducan:** los usuarios, habitantes y aforos se fijan a la fecha de cada fuente. No presentarlos como valores actuales ni borrar sus condiciones al editar una tarjeta.
 - **Famosos:** solo como palabras de juego, con pistas neutras («Streamer», «Fútbol»). No atribuirles frases ni hechos inventados.
 - **Tono:** humor de estudiante, sin estereotipos ofensivos.
 
@@ -247,7 +254,7 @@ Sergio ha probado la versión anterior en su móvil sin detectar problemas. Sigu
 ### Limitaciones conocidas
 - Los tiempos del catálogo son orientativos; cambian según el grupo y los ajustes.
 - El control de picante no clasifica automáticamente las preguntas o castigos escritos por el grupo.
-- Los datos históricos anteriores a la cuarta tanda no tienen todos sus enlaces y fechas de revisión registrados.
+- Las referencias incluyen estimaciones, bases documentales y crónicas contemporáneas; no todas son auditorías de costes o mediciones exactas. El enunciado y `precision` explicitan qué se está puntuando.
 - `CONTEXT.md` es público en el repositorio (incluye el nombre de pila del propietario y la ruta local).
 
 ### Mejoras incorporadas e ideas pendientes
@@ -275,3 +282,17 @@ Sergio ha probado la versión anterior en su móvil sin detectar problemas. Sigu
 6. Noviembre de 2026: git y publicación (repositorio público R4INYIS/corrillo + GitHub Pages); prueba en móvil real; escalas de En la misma onda reescritas con un solo eje; mazos que solo guardan una carta como jugada al terminar su ronda, con botón «Saltar» en los juegos donde tiene sentido; A ojo, Precio justo e Impostor de cifras puntúan por diferencia simple y muestran los resultados en escala lineal ampliada con la distancia de cada jugador.
 7. Noviembre de 2026: corrección de ajustes al reducir jugadores y de la caché ante errores HTTP; filtros del menú; picante, vista previa y salto de juego en fiesta; marcador normalizado y editable; historial visible; contenido propio en Verdad o Reto; copias JSON; 78 entradas nuevas con fuentes de sus datos y pruebas automáticas de lógica, interfaz y PWA. La revisión específica de funciones móviles y los cambios estéticos quedan para la siguiente fase.
 8. Noviembre de 2026: filtros y búsqueda temporales que se limpian al recargar, contador y limpieza del menú; los 26 juegos disponibles en Fiesta, con selección de todos los compatibles, rápidos o ninguno; conservación de la selección anterior; limpieza de narración al saltar; confirmaciones y controles numéricos mejorados para teclado y accesibilidad, con regresiones específicas.
+
+## 11. Auditoría implementada el 13-11-2026
+
+El alcance aprobado tras 105 decisiones está en `AUDITORIA_PLAN.md`; prevalece sobre propuestas del anexo original. Ranking y Pista única son juegos nuevos. Cuatro rondas es una modalidad de Charadas, visible y localizable en el buscador.
+
+- Solo competiciones completas suman una victoria a todos los primeros si hay alguien por debajo. También con negativos y equipos; cooperación y empate total no suman.
+- Apuesto usa azar ponderado con posibilidad positiva para todos los candidatos válidos, mínimo de intentos en ambos papeles y media de porcentajes; se conserva puntuación clásica.
+- Impostor y Espía: rápida/supervivencia, reparto/seguimiento. En supervivencia no hay adivinación; ganan infiltrados vivos al alcanzar paridad o todos los normales al eliminar a los infiltrados. No se conocen entre sí. Las soluciones no aparecen durante la última oportunidad de rápida.
+- Bomba: pase físico, sin pulsaciones; víctima elegida tras la explosión. Límites aleatorios 15–45 s por defecto; abierta, explosiones o vidas.
+- Preferencias de contenido opcionales. Castigos inicialmente desactivados y cambio ilimitado, sin omitir. Modo invitado sin autoguardados, borrado selectivo y copias de sesión. Grupos importados como copias por juego.
+- Panel de sonido/vibración independiente, pausa y ayuda; secretos cubiertos al segundo plano y mantener pulsado opcional. Las respuestas activas no se guardan.
+- Feedback local, ocultar/exportar y enlace para preparar issue; el usuario confirma su publicación en GitHub. Sin transmisión automática.
+- El editor visual conserva la entrada masiva avanzada. Los mazos especiales respetan filtros e historial y no marcan como jugadas las cartas reservadas sin mostrar.
+- Verificación: Node, `tests/regression.py`, `tests/audit_regression.py`, `tests/offline_update.py`, humo y `tests/visual_review.py`. Capturas en `artifacts/review` (ignoradas por Git): 320/390 px, horizontal, texto 150 %, gráfica y PNG de veinte personas. Sensores, multitarea e instalación en Android/iPhone físicos siguen pendientes.

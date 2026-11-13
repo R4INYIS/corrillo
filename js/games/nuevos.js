@@ -10,13 +10,16 @@
     how: ['Sale una frase que empieza por «Yo nunca…».', 'Quien SÍ lo haya hecho, lo paga según la regla elegida.', 'Si solo cae una persona, le toca contar la historia.', 'Pasad a la siguiente.'],
     cats: [UNI, { id: 'clasico', label: 'Clásico' }, { id: 'aventuras', label: 'Aventuras' }, { id: 'fiesta', label: '🎉 De fiesta' }, HOT],
     custom: { bank: 'yonunca', hint: 'Una frase por línea, sin «Yo nunca» delante. Ej.: he copiado en un examen' },
-    settings: [{ key: 'rule', label: 'Quien lo haya hecho…', type: 'select', def: 'dedo', options: [['dedo', 'Baja un dedo'], ['beber', 'Bebe un trago'], ['nada', 'Solo confiesa']] }],
+    settings: [{ key: 'rule', label: 'Quien lo haya hecho…', type: 'select', def: 'dedo', options: [['dedo', 'Baja un dedo'], ['beber', 'Bebe un trago'], ['nada', 'Solo confiesa']] },
+      { key: 'fingers', label: 'Dedos iniciales', type: 'select', def: 10, options: [[5, '5'], [10, '10']], show: (s) => s.rule === 'dedo' }],
     play(ctx) {
-      const rule = { dedo: 'Si lo has hecho, baja un dedo. Pierde quien se quede sin dedos.', beber: 'Si lo has hecho, bebe un trago.', nada: 'Si lo has hecho, levanta la mano y cuéntalo.' }[ctx.s.rule];
+      const rule = () => ({ dedo: 'Empezad con ' + ctx.s.fingers + ' dedos. Si lo has hecho, baja uno. No se registra nada en el móvil.', beber: 'Si lo has hecho, bebe un trago.', nada: 'Si lo has hecho, levanta la mano y cuéntalo.' }[ctx.s.rule]);
       (function next() {
         if (ctx.turn()) return;
         ctx.show(h('div', { class: 'center' }, h('div', { class: 'card q' }, h('small', null, 'Yo nunca…'), C.draw('yonunca', C.pool(C.content.yonunca, ctx.s.cats))),
-          h('p', { class: 'muted' }, rule), btn('Siguiente', next, 'primary big')));
+          h('p', { class: 'muted' }, rule()), h('div', { class: 'chips' }, [['dedo', 'Dedos'], ['beber', 'Beber'], ['nada', 'Contar historias']].filter(([value]) => C.partySpicy !== false || value !== 'beber').map(([value, label]) => btn(label, () => {
+            ctx.s.rule = value; const note = ctx.el.querySelector('.muted'); if (note) note.textContent = rule();
+          }, 'small'))), btn('Siguiente', next, 'primary big')));
       })();
     },
   });
@@ -40,7 +43,7 @@
         if (ctx.turn()) return;
         const cur = t++ % P.length, text = C.draw('cinco', C.pool(C.content.cinco, s.cats));
         const q = () => h('div', { class: 'card q' }, h('small', null, 'Di tres…'), text);
-        const verdict = (ok) => { C.commit(); if (ok) pts[cur]++; ok ? C.sound.ok() : C.sound.bad(); next(); };
+        const verdict = (ok) => { C.commit(); if (ok) pts[cur]++; ctx.progress = { names: P.slice(), points: pts.slice(), unit: ' pts', type: 'competitive', complete: false }; ok ? C.sound.ok() : C.sound.bad(); next(); };
         ctx.show(h('div', { class: 'center' }, h('p', { class: 'lead' }, 'Le toca a'), h('h2', { class: 'name' }, P[cur]), btn('Ver la consigna y empezar', () => {
           const clock = C.clock(ctx, s.secs, () => ctx.show(h('div', { class: 'center' }, h('div', { class: 'big-emoji' }, '⏰'), h('h2', null, '¡Tiempo!'), q(),
             h('div', { class: 'row2', style: 'width:100%' }, btn('Llegó a tiempo', () => verdict(true), 'yes big'), btn('No llegó', () => verdict(false), 'no big')))));
@@ -57,22 +60,59 @@
     how: ['Sale una pregunta.', 'El móvil pasa de mano en mano y cada uno escribe su respuesta en secreto.', 'Las respuestas aparecen mezcladas, de una en una.', 'Debatid de quién es cada una antes de revelar al autor.'],
     cats: [UNI, { id: 'clasico', label: 'Para reírse' }, { id: 'grupo', label: 'Sobre el grupo' }, HOT],
     custom: { bank: 'quienlodijo', hint: 'Una pregunta por línea.' },
+    settings: [
+      { key: 'competitive', label: 'Competir adivinando autores', type: 'toggle', def: false },
+      { key: 'rounds', label: 'Preguntas de la competición', type: 'step', def: 1, min: 1, max: 10, show: (s) => s.competitive },
+      { key: 'predictions', label: 'Predicciones de autor', type: 'select', def: 'public', options: [['public', 'En voz alta'], ['private', 'En privado']], show: (s) => s.competitive },
+    ],
     play(ctx) {
-      const P = ctx.players;
+      const P = ctx.players, s = ctx.s, points = P.map(() => 0);
+      let questions = 0;
       (function next() {
+        if (s.competitive && questions >= s.rounds) return ctx.show(ctx.finish(P, points, ' pts'));
         if (ctx.turn()) return;
+        questions++;
         const q = C.draw('quienlodijo', C.pool(C.content.quienlodijo, ctx.s.cats)), ans = [];
         ctx.show(h('div', { class: 'center' }, h('div', { class: 'card q' }, q), btn('Empezar a escribir', () => C.pass(ctx, P, (p, i) => {
           const inp = h('input', { type: 'text', class: 'textin', maxLength: 60, placeholder: 'Tu respuesta', autocomplete: 'off' });
           return { node: h('div', { class: 'stack' }, h('div', { class: 'card q' }, q), inp), before: () => (inp.value.trim() ? void (ans[i] = inp.value.trim()) : 'Escribe una respuesta.') };
-        }, () => reveal(C.shuffle(P.map((_, i) => i)), 0), { verb: 'Escribir mi respuesta' }), 'primary big')));
+        }, () => {
+          const indices = P.map((_, i) => i);
+          const order = s.competitive ? indices.filter((i) => ans.indexOf(ans[i]) === i) : indices;
+          reveal(C.shuffle(order), 0);
+        }, { verb: 'Escribir mi respuesta' }), 'primary big')));
 
         function reveal(order, k) {
           if (k === 0) C.commit();
           const i = order[k], slot = h('div', { class: 'stack' });
+          if (s.competitive) return competition(order, k);
           const go = btn(k + 1 < order.length ? 'Siguiente respuesta' : 'Otra pregunta', () => (k + 1 < order.length ? reveal(order, k + 1) : next()), 'primary big');
           slot.append(h('p', { class: 'muted' }, '¿Quién ha escrito esto?'), btn('Revelar autor', () => slot.replaceChildren(h('h2', null, '✍️ ' + P[i]), go), 'primary big'));
           ctx.show(h('div', { class: 'center' }, h('p', { class: 'pill' }, 'Respuesta ' + (k + 1) + ' de ' + order.length), h('p', { class: 'muted small' }, q), h('div', { class: 'card q' }, '«' + ans[i] + '»'), slot));
+        }
+        function competition(order, k) {
+          const i = order[k], authors = P.map((_, j) => j).filter((j) => ans[j] === ans[i]), voters = P.map((_, j) => j).filter((j) => !authors.includes(j));
+          const card = () => h('div', { class: 'card q' }, '«' + ans[i] + '»');
+          const following = () => k + 1 < order.length ? reveal(order, k + 1) : next();
+          function award(hits) {
+            hits.forEach((j) => points[j]++);
+            ctx.progress = { names: P.slice(), points: points.slice(), unit: ' pts', type: 'competitive', complete: false };
+            ctx.show(h('div', { class: 'center' }, card(), h('h2', null, '✍️ ' + authors.map((j) => P[j]).join(', ')), C.scores(P, points, ' pts'),
+              btn(k + 1 < order.length ? 'Siguiente respuesta' : questions >= s.rounds ? 'Ver clasificación' : 'Otra pregunta', following, 'primary big')));
+          }
+          if (!voters.length) return award([]);
+          if (s.predictions === 'private') {
+            const guesses = [];
+            return C.pass(ctx, voters.map((j) => P[j]), (_, j, forward) => ({ noBtn: true, node: h('div', { class: 'stack' }, card(),
+              C.pickGrid(P, (author) => { guesses[j] = author; forward(); })) }), () => award(voters.filter((_, j) => authors.includes(guesses[j]))), { verb: 'Adivinar autor' });
+          }
+          ctx.show(h('div', { class: 'center' }, card(), h('p', { class: 'muted' }, 'Todos dicen un autor antes de revelar. No se puntúa la respuesta propia.'),
+            btn('Predicciones cerradas: revelar', () => {
+              const hits = new Set();
+              ctx.show(h('div', { class: 'center' }, card(), h('h2', null, '✍️ ' + authors.map((j) => P[j]).join(', ')), h('p', { class: 'muted' }, 'Marca a quienes han acertado. Cualquiera de estos autores era válido.'),
+                voters.map((j) => h('label', { class: 'srow' }, P[j], h('input', { type: 'checkbox', onchange: (e) => e.target.checked ? hits.add(j) : hits.delete(j) }))),
+                btn('Confirmar puntos', () => award(Array.from(hits)), 'primary big')));
+            }, 'primary big')));
         }
       })();
     },
@@ -84,9 +124,11 @@
     tag: 'Uno elige en secreto; los demás intentan acertar qué ha elegido.',
     how: ['En cada ronda hay un protagonista.', 'Sale una pregunta sobre él con dos opciones y elige en secreto.', 'El resto, uno a uno, apuesta qué ha elegido.', 'Punto para quien acierte; el protagonista puntúa si lo conoce al menos la mitad.'],
     cats: [UNI, { id: 'gustos', label: 'Gustos' }, { id: 'caracter', label: 'Carácter' }, HOT],
-    settings: [{ key: 'rounds', label: 'Rondas por jugador', type: 'step', def: 2, min: 1, max: 5 }],
+    settings: [{ key: 'length', label: 'Duración', type: 'select', def: 'person', options: [['person', 'Rondas por participante'], ['total', 'Preguntas totales']] },
+      { key: 'rounds', label: 'Cantidad de rondas', type: 'step', def: 2, min: 1, max: 20 },
+      { key: 'interaction', label: 'Predicciones', type: 'select', def: 'private', options: [['private', 'Privadas'], ['public', 'Orales']] }],
     play(ctx) {
-      const P = ctx.players, s = ctx.s, pts = P.map(() => 0), total = s.rounds * P.length;
+      const P = ctx.players, s = ctx.s, pts = P.map(() => 0), total = s.length === 'total' ? s.rounds : s.rounds * P.length;
       let t = 0;
       (function next() {
         if (t >= total) return ctx.show(ctx.finish(P, pts, ' pts'));
@@ -98,13 +140,25 @@
         const guess = [];
         ctx.show(h('div', { class: 'center' }, h('p', { class: 'pill' }, 'Ronda ' + t + ' de ' + total), h('p', { class: 'lead' }, 'Protagonista'), h('h2', { class: 'name' }, P[pro]),
           btn('Empezar', () => C.pass(ctx, [P[pro]], (p, i, fwd) => choose('Elige con sinceridad', fwd, (v) => (truth = v)),
-            () => C.pass(ctx, others.map((i) => P[i]), (p, j, fwd) => choose('¿Qué ha elegido ' + P[pro] + '?', fwd, (v) => (guess[j] = v)), result, { verb: 'Apostar' }), { verb: 'Responder en secreto' }), 'primary big')));
+            () => s.interaction === 'public' ? oral() : C.pass(ctx, others.map((i) => P[i]), (p, j, fwd) => choose('¿Qué ha elegido ' + P[pro] + '?', fwd, (v) => (guess[j] = v)), result, { verb: 'Apostar' }), { verb: 'Responder en secreto' }), 'primary big')));
+
+        function oral() {
+          ctx.show(h('div', { class: 'center' }, h('div', { class: 'card q' }, text), h('div', { class: 'opt' }, a), h('div', { class: 'opt b' }, b),
+            h('p', { class: 'muted' }, 'Todos anuncian su predicción antes de revelar la respuesta.'),
+            btn('Ya hemos respondido: revelar', () => {
+              const hits = new Set();
+              ctx.show(h('div', { class: 'center' }, C.secret('✅', 'La respuesta de ' + P[pro], [a, b][truth]), h('p', { class: 'muted' }, 'Marca a quienes han acertado y confirma.'),
+                others.map((i) => h('label', { class: 'srow' }, P[i], h('input', { type: 'checkbox', onchange: (e) => e.target.checked ? hits.add(i) : hits.delete(i) }))),
+                btn('Confirmar aciertos', () => { others.forEach((i, j) => guess[j] = hits.has(i) ? truth : 1 - truth); result(); }, 'primary big')));
+            }, 'primary big')));
+        }
 
         function result() {
           C.commit();
           const hits = others.filter((_, j) => guess[j] === truth);
           hits.forEach((i) => pts[i]++);
           if (hits.length * 2 >= others.length) pts[pro]++;
+          ctx.progress = { names: P.slice(), points: pts.slice(), unit: ' pts', type: 'competitive', complete: false };
           ctx.show(h('div', { class: 'center' }, h('div', { class: 'card q' }, h('small', null, text), [a, b][truth]),
             h('div', { class: 'list' }, others.map((i, j) => h('div', { class: 'item ' + (guess[j] === truth ? 'hit' : 'miss') }, h('span', null, P[i]), h('b', null, guess[j] === truth ? '✓' : '✗')))),
             h('p', { class: 'lead' }, hits.length + ' de ' + others.length + ' conocen bien a ' + P[pro] + '.'),
@@ -173,13 +227,18 @@
     ],
     cats: [UNI, { id: 'clasico', label: 'Clásico' }, { id: 'absurdo', label: 'Absurdo' }, HOT],
     custom: { bank: 'onda', hint: 'Una escala por línea: extremo izquierdo|extremo derecho', fix: (x) => (x.includes('|') ? x : null) },
-    settings: [{ key: 'rounds', label: 'Rondas por jugador', type: 'step', def: 1, min: 1, max: 4 }],
+    settings: [{ key: 'rounds', label: 'Rondas por jugador', type: 'step', def: 1, min: 1, max: 4 },
+      { key: 'mode', label: 'Modalidad', type: 'select', def: 'coop', options: [['coop', 'Consenso cooperativo'], ['individual', 'Estimaciones individuales privadas']] }],
+    validate: (s, n) => s.mode === 'individual' && n < 3 ? 'La competición individual necesita al menos tres personas. El modo cooperativo admite dos.' : null,
     play(ctx) {
       const P = ctx.players, s = ctx.s, total = s.rounds * P.length;
       let t = 0, score = 0;
+      const points = P.map(() => 0);
       (function next() {
         if (t >= total) {
+          if (s.mode === 'individual') return ctx.show(ctx.finish(P, points.map((value) => Math.round(value * 100) / 100), ' pts'));
           const max = total * 4, pct = score / max;
+          C.recordOutcome(ctx, ['Grupo'], [score], { type: 'cooperative', unit: ' pts' });
           return ctx.show(h('div', { class: 'center' }, C.secret(pct >= 0.75 ? '🧠' : pct >= 0.45 ? '📡' : '📵', 'Puntuación del grupo', score + ' de ' + max, pct >= 0.75 ? 'Compartís cerebro.' : pct >= 0.45 ? 'Buena sintonía, con interferencias.' : 'Sin cobertura.'),
             C.shareBtn('En la misma onda', ['Sintonía del grupo', score + ' de ' + max + ' puntos'], '#b79cff'), ctx.endBar()));
         }
@@ -194,6 +253,21 @@
           return { node: h('div', { class: 'stack' }, h('p', { class: 'muted' }, 'Piensa algo que, entre estos dos extremos, caiga justo en el 4. No digas números ni posiciones.'), wheel, inp, swap),
             before: () => (inp.value.trim() ? void (clue = inp.value.trim()) : 'Escribe una pista.') };
         }, () => {
+          if (s.mode === 'individual') {
+            const others = P.map((_, i) => i).filter((i) => i !== giver), guesses = [];
+            return C.pass(ctx, others.map((i) => P[i]), (_, j) => {
+              let value = 50;
+              return { node: h('div', { class: 'stack' }, h('div', { class: 'card q' }, '«' + clue + '»'), scale(L, R, null, value, (v) => value = v)), before: () => { guesses[j] = value; } };
+            }, () => {
+              const earned = guesses.map((value) => ondaPts(Math.abs(value - target))), mean = earned.reduce((sum, value) => sum + value, 0) / earned.length;
+              others.forEach((i, j) => points[i] += earned[j]); points[giver] += mean;
+              ctx.progress = { names: P.slice(), points: points.map((value) => Math.round(value * 100) / 100), unit: ' pts', type: 'competitive', complete: false };
+              ctx.show(h('div', { class: 'center' }, h('h2', null, 'Franja revelada'), h('div', { class: 'card q' }, '«' + clue + '»'), scale(L, R, target, target, null, true),
+                h('div', { class: 'list' }, others.map((i, j) => h('div', { class: 'item' }, P[i], h('b', null, guesses[j] + ' → +' + earned[j])))),
+                h('p', { class: 'lead' }, P[giver] + ' recibe la media: +' + C.num(Math.round(mean * 100) / 100)),
+                btn(t >= total ? 'Ver clasificación' : 'Siguiente ronda', next, 'primary big')));
+            }, { verb: 'Elegir mi posición' });
+          }
           let v = 50;
           ctx.show(h('div', { class: 'center' }, h('p', { class: 'pill' }, 'Ronda ' + t + ' de ' + total + ' · pista de ' + P[giver]), h('div', { class: 'card q' }, '«' + clue + '»'),
             scale(L, R, null, 50, (x) => (v = x)), h('p', { class: 'muted' }, 'Debatid y girad la aguja. ' + P[giver] + ' no puede dar más pistas.'),
@@ -211,8 +285,11 @@
   });
 
   /* ---------- Contraseña (tabú inverso) ---------- */
+  C.content.contrasena = Object.assign({}, C.content.charadas);
   C.register({
     id: 'contrasena', name: 'Contraseña', emoji: '🔐', color: '#ffc93c', group: 'palabras', min: 2,
+    teamBased: true,
+    custom: { bank: 'contrasena', hint: 'Una palabra o expresión por línea.' },
     tag: 'Pistas de una sola palabra. Cuantas menos gastes, más puntos.',
     how: [
       'Quien da las pistas ve una palabra secreta.',
@@ -222,32 +299,39 @@
     ],
     cats: [UNI, { id: 'animales', label: 'Animales' }, { id: 'acciones', label: 'Acciones' }, { id: 'oficios', label: 'Oficios' }, { id: 'objetos', label: 'Objetos' }, { id: 'famosos', label: 'Personajes' }, HOT],
     settings: [
-      { key: 'teams', label: 'Jugar por equipos', type: 'toggle', def: false, help: 'Dos equipos alternos; adivina solo el equipo de quien da la pista.' },
+      { key: 'mode', label: 'Modalidad', type: 'select', def: 'coop', options: [['coop', 'Cooperativo'], ['individual', 'Individual'], ['equipos', 'Equipos']] },
+      { key: 'teams', label: 'Equipos de configuraciones anteriores', type: 'toggle', def: false, show: () => false },
       { key: 'max', label: 'Pistas máximas', type: 'select', def: 5, options: [[3, '3'], [5, '5']] },
-      { key: 'rounds', label: 'Turnos por jugador', type: 'step', def: 2, min: 1, max: 5 },
-    ],
-    validate: (s, n) => (s.teams && n < 4 ? 'Para jugar por equipos hacen falta al menos 4 jugadores.' : null),
+      { key: 'rounds', label: 'Turnos por persona o equipo', type: 'step', def: 2, min: 1, max: 5 },
+    ].concat(C.teamSettings()),
+    validate: (s, n) => (s.mode === 'equipos' && n < 4 ? 'Para jugar por equipos hacen falta al menos 4 jugadores.' : null),
     play(ctx) {
-      const P = ctx.players, s = ctx.s, total = s.rounds * P.length;
-      const sides = s.teams ? ['Equipo A', 'Equipo B'] : P, pts = sides.map(() => 0), side = (i) => (s.teams ? i % 2 : i);
+      const P = ctx.players, s = ctx.s, teams = s.mode === 'equipos' ? C.teamsOf(P, s) : null;
+      const total = s.rounds * (teams ? teams.length : P.length);
+      const sides = teams ? teams.map((team) => team.name) : s.mode === 'coop' ? ['Grupo'] : P;
+      const pts = sides.map(() => 0), side = (i) => teams ? teams.findIndex((team) => team.indices.includes(i)) : s.mode === 'coop' ? 0 : i;
       let t = 0;
       (function next() {
-        if (t >= total) return ctx.show(ctx.finish(sides, pts, ' pts', s.teams));
-        const cur = t++ % P.length, word = C.draw('contrasena', C.pool(C.content.charadas, s.cats));
+        ctx.private = false;
+        if (t >= total) return ctx.show(ctx.finish(sides, pts, ' pts', teams || { type: s.mode === 'coop' ? 'cooperative' : 'competitive' }));
+        const cur = teams ? C.teamTurn(teams, t).player : t % P.length, word = C.draw('contrasena', C.pool(C.content.contrasena, s.cats));
+        t++;
         let used = 1;
         const done = (got) => {
+          ctx.private = false;
           C.commit();
           pts[side(cur)] += got;
+          ctx.progress = { names: sides.slice(), points: pts.slice(), unit: ' pts', type: s.mode === 'coop' ? 'cooperative' : 'competitive', complete: false };
           got ? C.sound.ok() : C.sound.bad();
           ctx.show(h('div', { class: 'center' }, h('div', { class: 'card q' }, h('small', null, 'La palabra era'), word), h('h2', null, got ? '+' + got + (got === 1 ? ' punto' : ' puntos') : 'Sin puntos'),
             C.scores(sides, pts, ' pts'), btn(t >= total ? 'Ver clasificación' : 'Siguiente turno', next, 'primary big')));
         };
-        const round = () => ctx.show(h('div', { class: 'center' }, h('p', { class: 'pill' }, P[cur] + ' · pista ' + used + ' de ' + s.max), h('div', { class: 'card word' }, word),
+        const round = () => { ctx.private = true; ctx.show(h('div', { class: 'center' }, h('p', { class: 'pill' }, P[cur] + ' · pista ' + used + ' de ' + s.max), h('div', { class: 'card word' }, word),
           h('p', { class: 'muted' }, 'Di una sola palabra. No valen gestos ni palabras de la misma familia.'),
           btn('¡Acertada!', () => done(s.max - used + 1), 'yes big'),
-          used < s.max ? btn('Han fallado: otra pista', () => { used++; round(); }, 'mid') : btn('No la han adivinado', () => done(0), 'no')));
+          used < s.max ? btn('Han fallado: otra pista', () => { used++; round(); }, 'mid') : btn('No la han adivinado', () => done(0), 'no'))); };
         ctx.show(h('div', { class: 'center' }, h('p', { class: 'lead' }, 'Da las pistas'), h('h2', { class: 'name' }, P[cur]),
-          s.teams && h('p', { class: 'pill' }, sides[side(cur)] + ' adivina'), h('p', { class: 'muted' }, 'Que solo ' + P[cur] + ' vea la pantalla.'), btn('Ver la palabra', round, 'primary big')));
+          teams && h('p', { class: 'pill' }, sides[side(cur)] + ' adivina'), h('p', { class: 'muted' }, 'Que solo ' + P[cur] + ' vea la pantalla.'), btn('Ver la palabra', round, 'primary big')));
       })();
     },
   });

@@ -1,6 +1,6 @@
 # Corrillo
 
-Colección de 26 minijuegos sociales para jugar en grupo con un solo móvil. Es una web estática (HTML, CSS y JavaScript sin compilar): no necesita servidor, cuentas ni conexión.
+Colección de 28 minijuegos sociales para jugar en grupo con un solo móvil. Es una web estática (HTML, CSS y JavaScript sin compilar): no necesita servidor, cuentas ni conexión.
 
 ## Abrirla
 
@@ -16,6 +16,9 @@ index.html            Página única; carga los scripts en orden
 css/styles.css        Estilos (móvil primero)
 js/core/core.js       Registro de juegos, rutas, pantalla de configuración y componentes compartidos
 js/core/library.js    Catálogo, historial, contenido propio y copias de seguridad
+js/core/rules.js      Resultados, equipos, roles y votaciones
+js/core/experience.js Privacidad, pausa, modo invitado y grupos guardados
+js/core/catalogue.js  Identidades, etiquetas, editor visual y feedback
 js/content/*.js       Contenido: palabras, preguntas, retos, categorías (solo texto)
 js/games/*.js         Un módulo por minijuego o familia de minijuegos
 sw.js, manifest       Instalación como app y uso sin conexión
@@ -40,14 +43,14 @@ Abre el archivo de `js/content/` correspondiente y añade líneas a la categorí
 
 Componentes reutilizables en `Corrillo`: `pass` (reparto privado pasando el móvil), `clock` (cuenta atrás), `pickGrid` (elegir jugador), `scores`, `numIn`, `secret`, `draw` (mazo sin repeticiones), `sound`.
 
-Al publicar cambios, sube `VERSION` en `sw.js` para que los móviles descarguen la versión nueva.
+Al editar contenido ejecuta `node tools/catalogue.cjs`: conserva los IDs y alias del historial. Registra cambios factuales con su referencia, fecha, contexto y precisión en `revision.js` o `referencias.js`. Al publicar, sube `VERSION` en `sw.js` y ejecuta `node tools/offline.cjs` después del último cambio de recursos. Este último normaliza finales de línea y fija sus hashes de integridad. Las pruebas detectan hashes desactualizados.
 
 ## Funciones generales
 
-- **Modo fiesta** (`js/games/fiesta.js`): permite combinar los 26 juegos con una sola lista de jugadores. Los marcados con `party: true` llaman a `ctx.turn()` y alternan tras los turnos elegidos; los demás completan su ronda o partida y continúan desde `ctx.endBar()`. «Al azar» es una herramienta libre y se avanza con «Saltar al siguiente juego».
-- **Contenido propio**: los juegos con `custom: { bank, hint }` muestran un cuadro en su pantalla de ajustes; lo escrito se guarda en el dispositivo como categoría «Propias».
+- **Modo fiesta** (`js/games/fiesta.js`): combina los 28 juegos, partidas rápidas o completas, modalidad oral/privada y uso mínimo del móvil. Permite final por juegos o ciclos y resumen con resultados parciales. Las competiciones completan ciclos; saltarlas no concede victorias incompletas.
+- **Contenido propio**: editor visual con vista previa, entrada masiva avanzada y guardado expreso; incluye Prohibidas. Los grupos guardados se importan como copias independientes por juego.
 - **Castigos** (`#/castigos`): `Corrillo.penalty(nombre)` devuelve una tarjeta con un castigo al azar, o nada si están desactivados.
-- **Marcador de la noche** (`#/marcador`): `ctx.finish(nombres, puntos, unidad)` pinta la clasificación final y suma una victoria a quien gane.
+- **Marcador de la noche** (`#/marcador`): solo competiciones completas conceden victorias. Los primeros empatados ganan si queda alguien por debajo, incluso con negativos; empate total y cooperación no suman victorias individuales.
 - **Compartir**: `Corrillo.shareBtn(título, líneas, color)` genera una imagen con el resultado.
 - **Favoritos, recientes y juego al azar** en el menú; **«Usar los de la última partida»** en la configuración de cada juego.
 - **Fotos de Precio justo**: ver `img/precios/LEEME.txt`.
@@ -62,7 +65,17 @@ El marcador fusiona nombres que solo difieran en mayúsculas o espacios y permit
 
 **Copias de seguridad**, al pie del menú, descarga o restaura un JSON con nombres, preguntas, ajustes, historial y marcador. La restauración valida todo el archivo antes de escribir y conserva los datos anteriores si falta espacio. Los datos se quedan en tu dispositivo; guarda la copia donde prefieras.
 
-Los datos nuevos de `js/content/ampliacion2.js` registran fuentes primarias y fecha de consulta en `Corrillo.sources`. Los resultados enlazan las fuentes disponibles. El contenido anterior no tiene todavía una auditoría retrospectiva completa.
+**Nuevos juegos:** Ranking a ciegas y Pista única. **Charadas → Cuatro rondas por equipos** contiene las cuatro fases de descripción, una palabra, mímica y sonidos: mismo mazo, turnos de 60 s y siguiente fase para el equipo posterior al que agota el mazo. Admite dos o más equipos y aportaciones de sesión.
+
+Impostor y Espía ofrecen rápida y supervivencia, solo reparto o seguimiento, votos secretos opcionales y desempate. Los infiltrados no se conocen entre sí. Bomba permite pasar el móvil sin pulsar, seleccionar víctima tras la explosión y jugar por explosiones o vidas. Se conservan modalidades individuales, cooperativas, por equipos y orales donde corresponden.
+
+El panel de partida permite cambiar sonido/vibración, pausar y consultar reglas públicas. Los secretos se cubren al ir a segundo plano; la pausa del tiempo es configurable. Mantener pulsado para ver roles es opcional. Los castigos están desactivados inicialmente y pueden cambiarse sin límite; los filtros de materiales, apps, terceros, contacto, esfuerzo y exposición son opcionales.
+
+**Datos y preferencias** incluye modo invitado sin autoguardado, borrado selectivo, exportación e informes locales sobre tarjetas. Un enlace prepara una issue de GitHub: el usuario decide publicarla allí con su cuenta; la app no envía informes automáticamente.
+
+Los **338 datos factuales** (120 preguntas de cifras, 54 estimaciones, 70 precios y 94 afirmaciones V/F) tienen referencia, fecha, contexto y precisión en `Corrillo.sources`. Se distinguen estimaciones publicadas, precios de lanzamiento, acuerdos y subastas. Las seis categorías V/F están equilibradas. El historial factual compartido entre A ojo, Subasta e Impostor de cifras viene activado y migra el historial anterior; se puede usar por separado.
+
+La caché sirve una versión coherente de la aplicación; las fotos se descargan aparte. Una foto ausente tiene alternativa visual y no impide usar los otros juegos sin conexión. El menú informa de las fotos pendientes y permite reintentarlas.
 
 ## Comprobar cambios
 
@@ -70,7 +83,10 @@ Los datos nuevos de `js/content/ampliacion2.js` registran fuentes primarias y fe
 node --test tests/*.test.js
 python -m pip install -r tests/requirements.txt
 python tests/regression.py
+python tests/audit_regression.py
+python tests/offline_update.py
 python tests/smoke.py --seed 20261113 --variants 1 --steps 40
+python tests/visual_review.py
 ```
 
 Las pruebas de navegador usan Chrome instalado. Para usar Chromium de Playwright, ejecuta `python -m playwright install chromium` y define `CHROME_CHANNEL=chromium`. La prueba de humo también acepta ids de juegos, `--steps`, `--variants` y `--seed`. La suite comprueba configuración, mazos, puntuación y empates, Modo fiesta, copias, contenido y funcionamiento sin conexión. GitHub Actions ejecuta estas comprobaciones en cada push a `main` y cada pull request.

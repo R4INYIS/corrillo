@@ -72,19 +72,17 @@
       'Pasad al siguiente dilema.',
     ],
     cats: [{ id: 'uni', label: '🎓 Universidad' }, { id: 'clasico', label: 'Clásico' }, { id: 'absurdo', label: 'Absurdo' }, { id: 'dificil', label: 'Difíciles' }, { id: 'fiesta', label: '🎉 De fiesta' }, { id: 'picante', label: 'Picante', spicy: true }],
+    settings: [
+      { key: 'interaction', label: 'Cómo elegir', type: 'select', def: 'manual', options: [['manual', 'Recuento manual'], ['public', 'En voz alta'], ['private', 'Voto privado']] },
+      { key: 'detail', label: 'Mostrar elecciones con nombres', type: 'toggle', def: false, show: (s) => s.interaction === 'private' },
+    ],
 
     play(ctx) {
       const s = ctx.s;
       (function next() {
         if (ctx.turn()) return;
         const [a, b] = C.draw('prefieres', C.pool(C.content.prefieres, s.cats)).split('|');
-        const opt = (text, cls) => {
-          let n = 0;
-          const t = h('span', { class: 'tally' });
-          return h('button', { type: 'button', class: 'opt ' + cls, onclick: () => { t.textContent = '✋ ' + ++n; } }, text, t);
-        };
-        ctx.show(h('div', { class: 'stack' }, h('p', { class: 'lead', style: 'text-align:center' }, '¿Qué prefieres?'), opt(a, ''), h('div', { class: 'vs' }, 'o'), opt(b, 'b'),
-          h('p', { class: 'muted small', style: 'text-align:center' }, 'Toca una opción por cada voto.'), btn('Siguiente dilema', next, 'primary big')));
+        C.choiceRound(ctx, '¿Qué prefieres?', [a, b], s.interaction, next);
       })();
     },
   });
@@ -100,24 +98,28 @@
       'Con puntuación en el móvil se calcula la media del grupo.',
     ],
     cats: [{ id: 'uni', label: '🎓 Universidad' }, { id: 'clasico', label: 'Clásico' }, { id: 'manias', label: 'Manías' }, { id: 'absurdo', label: 'Absurdo' }, { id: 'picante', label: 'Picante', spicy: true }],
-    settings: [{ key: 'mode', label: 'Valoración', type: 'select', def: 'oral', options: [['oral', 'En voz alta'], ['nota', 'Puntuar en el móvil']] }],
+    settings: [{ key: 'mode', label: 'Valoración', type: 'select', def: 'oral', options: [['oral', 'En voz alta'], ['nota', 'Puntuar en el móvil']] },
+      { key: 'detail', label: 'Mostrar notas con nombres', type: 'toggle', def: false, show: (s) => s.mode === 'nota' }],
 
     play(ctx) {
       const P = ctx.players, s = ctx.s;
+      let greatestSpread = -1;
       (function next() {
         if (ctx.turn()) return;
         const text = C.draw('diez', C.pool(C.content.diez, s.cats));
         const q = () => h('div', { class: 'card q' }, h('small', null, 'Es un 10, pero…'), text);
         if (s.mode === 'oral') return ctx.show(h('div', { class: 'center' }, q(), h('p', { class: 'muted' }, '¿Qué nota le queda? Decidla en voz alta.'), btn('Siguiente', next, 'primary big')));
         const notes = [];
-        (function rate(i) {
-          if (i < P.length)
-            return ctx.show(h('div', { class: 'center' }, q(), h('p', { class: 'lead' }, 'Nota de ' + P[i]),
-              h('div', { class: 'tens' }, Array.from({ length: 11 }, (_, v) => btn(v, () => { notes.push(v); rate(i + 1); })))));
+        C.pass(ctx, P, (_, i, forward) => ({ noBtn: true, node: h('div', { class: 'stack' }, q(),
+          h('div', { class: 'tens' }, Array.from({ length: 11 }, (_, v) => btn(v, () => { notes[i] = v; forward(); })))) }), () => {
           const avg = notes.reduce((a, b) => a + b, 0) / notes.length;
+          const spread = Math.sqrt(notes.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / notes.length), divisive = spread > greatestSpread;
+          greatestSpread = Math.max(greatestSpread, spread);
           ctx.show(h('div', { class: 'center' }, q(), C.secret(avg >= 7 ? '😍' : avg >= 4 ? '🤨' : '🚩', 'Para este grupo se queda en un', avg.toLocaleString('es-ES', { maximumFractionDigits: 1 })),
-            h('div', { class: 'list' }, P.map((p, k) => h('div', { class: 'item' }, h('span', null, p), h('b', null, notes[k])))), btn('Siguiente', next, 'primary big')));
-        })(0);
+            h('p', { class: 'lead' }, 'Notas de ' + Math.min(...notes) + ' a ' + Math.max(...notes)),
+            h('p', { class: 'muted' }, 'Dispersión: ' + spread.toLocaleString('es-ES', { maximumFractionDigits: 1 }) + (divisive && spread > 0 ? ' · La que más os divide hasta ahora.' : '')),
+            s.detail && h('details', { class: 'how' }, h('summary', null, 'Notas por persona'), P.map((p, k) => h('p', null, p + ': ' + notes[k]))), btn('Siguiente', next, 'primary big')));
+        }, { verb: 'Puntuar en privado' });
       })();
     },
   });
@@ -133,25 +135,17 @@
       'Discutid las diferencias (que las habrá) y seguid.',
     ],
     cats: [{ id: 'uni', label: '🎓 Universidad' }, { id: 'clasico', label: 'Clásico' }, { id: 'emocional', label: 'Emocional' }, { id: 'convivencia', label: 'Convivencia' }, { id: 'picante', label: 'Picante', spicy: true }],
-    settings: [{ key: 'mode', label: 'Modo', type: 'select', def: 'voto', options: [['voto', 'Vota cada jugador'], ['debate', 'Solo debatir']] }],
+    settings: [{ key: 'mode', label: 'Modo', type: 'select', def: 'voto', options: [['voto', 'Vota cada jugador'], ['debate', 'Solo debatir']] },
+      { key: 'interaction', label: 'Votación', type: 'select', def: 'private', options: [['private', 'Privada'], ['public', 'En voz alta']] },
+      { key: 'nuance', label: 'Añadir «Depende»', type: 'toggle', def: false },
+      { key: 'detail', label: 'Mostrar elecciones con nombres', type: 'toggle', def: false }],
 
     play(ctx) {
       const P = ctx.players, s = ctx.s;
       (function next() {
         if (ctx.turn()) return;
         const text = C.draw('detallazo', C.pool(C.content.detallazo, s.cats));
-        const q = () => h('div', { class: 'card q' }, text);
-        if (s.mode === 'debate') return ctx.show(h('div', { class: 'center' }, q(), h('p', { class: 'lead' }, '👑 ¿Detallazo o lo mínimo? 🤷'), btn('Siguiente', next, 'primary big')));
-        let yes = 0;
-        (function vote(i) {
-          if (i < P.length)
-            return ctx.show(h('div', { class: 'center' }, q(), h('p', { class: 'lead' }, 'Vota ' + P[i]),
-              h('div', { class: 'row2', style: 'width:100%' }, btn('👑 Detallazo', () => { yes++; vote(i + 1); }, 'yes big'), btn('🤷 Lo mínimo', () => vote(i + 1), 'no big'))));
-          const pct = Math.round((yes / P.length) * 100);
-          ctx.show(h('div', { class: 'center' }, q(), h('h2', null, pct === 50 ? 'Empate total' : pct > 50 ? 'Detallazo' : 'Lo mínimo'),
-            h('div', { class: 'meter' }, h('i', { style: 'width:' + pct + '%' })),
-            h('p', { class: 'lead' }, '👑 ' + pct + ' %  ·  🤷 ' + (100 - pct) + ' %'), btn('Siguiente', next, 'primary big')));
-        })(0);
+        C.choiceRound(ctx, text, ['👑 Detallazo', '🤷 Lo mínimo'].concat(s.nuance ? ['Depende'] : []), s.mode === 'debate' ? 'public' : s.interaction, next);
       })();
     },
   });

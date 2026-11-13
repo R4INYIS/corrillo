@@ -82,16 +82,16 @@ test('los filtros combinan tamaño de grupo, duración y estilo', () => {
   assert.equal(games.some((g) => C.catalog[g.id][1] > 5), false);
 });
 
-test('Fiesta ofrece los 26 juegos sin cambiar automáticamente una selección anterior', () => {
+test('Fiesta ofrece todo el catálogo sin cambiar automáticamente una selección anterior', () => {
   const { C } = loadApp();
   const g = C.games.find((it) => it.id === 'fiesta');
   const quick = C.games.filter((it) => it.party).map((it) => it.id);
-  assert.equal(g.cats.length, 26);
+  assert.equal(g.cats.length, 28);
   assert.equal(C.loadCfg(g).s.cats.length, quick.length);
   C.store.set('cfg:fiesta', { players: ['', '', '', ''], s: { cats: quick }, known: quick });
   assert.deepEqual(json(C.loadCfg(g).s.cats), json(quick));
   const all = g.categoryPresets.find((p) => p.label === 'Todos compatibles').select({ spicy: false }, 4);
-  assert.equal(all.length, 26);
+  assert.equal(all.length, 28);
   assert.ok(all.includes('lobos') && all.includes('azar') && all.includes('aojo'));
   const two = g.categoryPresets.find((p) => p.label === 'Todos compatibles').select({ spicy: false }, 2);
   assert.equal(two.includes('lobos'), false);

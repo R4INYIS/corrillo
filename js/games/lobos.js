@@ -18,6 +18,12 @@
       'Los lobos eligen víctima y los papeles especiales usan su poder. Los aldeanos también tocan un nombre para disimular.',
       'Al amanecer se anuncia qué ha pasado. El pueblo debate y vota a quién expulsar.',
       'Gana el pueblo si expulsa a todos los lobos; ganan los lobos si igualan en número al resto.',
+      'Los lobos se conocen. El protector puede protegerse y repetir objetivo. La bruja elige a ciegas a quien salvar y usa como máximo una poción cada noche.',
+      'Los amantes siguen en sus bandos originales; sus muertes se encadenan. El veneno no lo detiene el protector. Si no sobrevive nadie, no hay ganador.',
+    ],
+    presets: [
+      { label: 'Primera partida', settings: { wolves: 1, seer: true, guard: false, witch: false, hunter: false, cupid: false } },
+      { label: 'Avanzado', settings: { seer: true, guard: true, witch: true, hunter: true, cupid: true } },
     ],
     settings: [
       { key: 'wolves', label: 'Lobos', type: 'step', def: 1, min: 1, max: (n) => Math.max(1, Math.ceil(n / 2) - 1) },
@@ -27,6 +33,7 @@
       { key: 'hunter', label: '🏹 Cazador', type: 'toggle', def: false },
       { key: 'cupid', label: '💘 Cupido', type: 'toggle', def: false },
       { key: 'reveal', label: 'Mostrar el papel de los eliminados', type: 'toggle', def: true },
+      { key: 'secretVotes', label: 'Votos secretos durante el día', type: 'toggle', def: false },
       { key: 'voice', label: 'Narración por voz', type: 'toggle', def: true, help: 'El móvil anuncia en voz alta la noche, el amanecer y el final.' },
       { key: 'debate', label: 'Tiempo de debate', type: 'select', def: 0, options: [[0, 'Sin límite'], [120, '2 min'], [180, '3 min'], [300, '5 min']] },
     ],
@@ -50,7 +57,7 @@
 
       function winner() {
         const l = living(), w = wolvesOf(l).length;
-        return w === 0 ? 'pueblo' : w * 2 >= l.length ? 'lobos' : null;
+        return C.lobosWinner(l.length, w);
       }
       /* Mata a los jugadores indicados y resuelve las muertes en cadena (enamorados, disparo del cazador). */
       function die(list, done) {
@@ -124,21 +131,23 @@
         ctx.show(h('div', { class: 'center' }, h('div', { class: 'big-emoji' }, '🌅'), h('h2', null, 'Amanece en el pueblo'),
           dead.length ? dead.map((i) => C.secret('💀', 'Esta noche ha muerto', P[i], was(i))) : h('p', { class: 'lead' }, 'Nadie ha muerto esta noche.'),
           w ? btn('Ver el final', () => end(w), 'primary big') : [
+            h('p', { class: 'muted' }, 'Siguen vivos: ' + names(living())),
             h('p', { class: 'muted' }, 'Debatid, acusaos y votad a mano alzada a quién expulsáis.'), clock && clock.el,
             btn('Ir a la votación', () => { clock && clock.stop(); vote(); }, 'primary big')]));
       }
       function vote() {
         const L = living();
-        ctx.show(h('div', { class: 'center' }, h('h2', null, '¿A quién expulsa el pueblo?'),
-          C.pickGrid(L.map((i) => P[i]), (k) => die([L[k]], (dead) => {
+        C.accusation(ctx, L, { secret: s.secretVotes }, (accused) => die([accused], (dead) => {
             const w = winner();
             ctx.show(h('div', { class: 'center' },
               dead.map((i, j) => C.secret(j ? '💔' : '⚖️', j ? 'También cae' : 'El pueblo expulsa a', P[i], was(i))),
               btn(w ? 'Ver el final' : 'Cae la noche', () => (w ? end(w) : night()), 'primary big')));
-          }), btn('Nadie (empate)', night, 'wide'))));
+          }), night);
       }
       function end(w) {
-        const title = w === 'lobos' ? 'Ganan los lobos' : 'Gana el pueblo';
+        const title = w === 'none' ? 'No ha sobrevivido nadie' : w === 'lobos' ? 'Ganan los lobos' : 'Gana el pueblo';
+        const winners = P.filter((_, i) => w !== 'none' && ((role[i] === 'lobo') === (w === 'lobos')));
+        C.recordOutcome(ctx, P, P.map((p) => winners.includes(p) ? 1 : 0));
         say(title + '.');
         ctx.show(h('div', { class: 'center' }, h('div', { class: 'big-emoji' }, w === 'lobos' ? '🐺' : '🎉'), h('h2', null, title),
           h('div', { class: 'list' }, P.map((p, i) => h('div', { class: 'item' + (alive[i] ? '' : ' miss') }, h('span', null, (alive[i] ? '' : '💀 ') + p), h('b', null, ROLES[role[i]][0] + ' ' + ROLES[role[i]][1])))),

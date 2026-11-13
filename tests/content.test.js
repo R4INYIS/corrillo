@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const crypto = require('node:crypto');
 const { loadApp, ROOT } = require('./helpers');
 
 test('todos los bancos conservan su formato y no tienen duplicados dentro de una categoría', () => {
@@ -32,7 +33,7 @@ test('todos los bancos conservan su formato y no tienen duplicados dentro de una
   }
 });
 
-test('la ampliación tiene el tamaño previsto y fuentes primarias con fecha y pregunta existente', () => {
+test('todos los datos factuales tienen referencia, fecha, contexto y precisión', () => {
   const { C } = loadApp();
   const size = (bank) => Object.values(C.content[bank]).flat().length;
   assert.equal(size('cifras'), 60);
@@ -40,19 +41,30 @@ test('la ampliación tiene el tamaño previsto y fuentes primarias con fecha y p
   assert.equal(size('invento'), 94);
   assert.equal(size('quienlodijo'), 86);
   assert.equal(size('castigos'), 66);
-  assert.equal(C.sources.length, 54);
+  assert.equal(C.sources.length, 338);
+  for (const bank of ['cifras', 'estimaciones', 'precios', 'invento']) {
+    for (const item of Object.values(C.content[bank]).flat()) {
+      const questions = bank === 'cifras' ? [item[0], item[3]] : bank === 'invento' ? [item.split('|')[1]] : [item[0]];
+      questions.forEach((question) => assert.equal(C.sources.filter((source) => source.bank === bank && source.question === question).length, 1, question));
+    }
+  }
+  for (const items of Object.values(C.content.invento)) {
+    const truth = items.filter((item) => item.startsWith('V|')).length / items.length;
+    assert.ok(truth >= .45 && truth <= .55, 'V/F equilibrado: ' + truth);
+  }
   for (const source of C.sources) {
     const questions = Object.values(C.content[source.bank]).flat().flatMap((it) => source.bank === 'cifras' ? [it[0], it[3]] : source.bank === 'invento' ? [it.split('|')[1]] : [it[0]]);
     assert.ok(questions.includes(source.question), source.question);
     assert.match(source.checked, /^\d{4}-\d{2}-\d{2}$/);
     assert.ok(source.urls.length);
+    assert.ok(source.asof && source.precision, source.question);
     source.urls.forEach((url) => assert.equal(new URL(url).protocol, 'https:'));
   }
 });
 
-test('el catálogo cubre los 26 juegos y todas las categorías seleccionables contienen datos', () => {
+test('el catálogo cubre los 28 juegos y todas las categorías seleccionables contienen datos', () => {
   const { C } = loadApp();
-  assert.equal(C.games.filter((g) => !g.hidden).length, 26);
+  assert.equal(C.games.filter((g) => !g.hidden).length, 28);
   for (const g of C.games) {
     if (!g.hidden) assert.ok(C.catalog[g.id], g.id);
     if (g.id === 'fiesta' || !g.cats) continue;
@@ -76,4 +88,10 @@ test('la caché incluye scripts, estilos, manifest, iconos y todas las fotos y c
   C.content.creditos.forEach(([src]) => assert.ok(files.includes(src), src));
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.webmanifest'), 'utf8'));
   manifest.icons.forEach(({ src }) => assert.ok(files.includes(src), src));
+  const code = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
+  const integrity = JSON.parse(code.match(/const INTEGRITY = (\{[\s\S]*?\});/)[1]);
+  for (const file of files) {
+    const bytes = fs.readFileSync(path.join(ROOT, file === './' ? 'index.html' : file));
+    assert.equal(integrity[file], 'sha256-' + crypto.createHash('sha256').update(bytes).digest('base64'), 'Regenerar node tools/offline.cjs: ' + file);
+  }
 });

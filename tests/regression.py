@@ -89,7 +89,7 @@ class Regression(unittest.IsolatedAsyncioTestCase):
         await expect(self.page.get_by_label('Duración aproximada', exact=True)).to_have_value('0')
         await expect(self.page.get_by_label('Estilo', exact=True)).to_have_value('')
         await expect(self.page.get_by_role('button', name='Todos', exact=True)).to_have_attribute('aria-pressed', 'true')
-        await expect(self.page.locator('.result-count')).to_have_text('26 juegos disponibles')
+        await expect(self.page.locator('.result-count')).to_have_text('28 juegos disponibles')
 
     async def test_empty_search_and_clear_filters(self):
         await self.page.get_by_text('Encontrar juego para el grupo', exact=True).click()
@@ -98,11 +98,11 @@ class Regression(unittest.IsolatedAsyncioTestCase):
         await expect(self.page.locator('.result-count')).to_have_text('0 juegos disponibles')
         await expect(self.page.get_by_role('button', name='🎲 Al azar', exact=True)).to_be_disabled()
         await self.page.get_by_role('button', name='Mostrar todos los juegos', exact=True).click()
-        await expect(self.page.locator('.gcard')).to_have_count(26)
+        await expect(self.page.locator('.gcard')).to_have_count(28)
         await expect(self.page.get_by_label('Buscar juego', exact=True)).to_be_focused()
         await self.page.get_by_role('button', name='Deducción y engaño', exact=True).click()
         await self.page.get_by_role('button', name='Limpiar búsqueda y filtros', exact=True).click()
-        await expect(self.page.locator('.gcard')).to_have_count(26)
+        await expect(self.page.locator('.gcard')).to_have_count(28)
 
     async def test_confirmation_keyboard_and_focus(self):
         await self.page.goto(URL + '#/j/impostor')
@@ -171,10 +171,11 @@ class Regression(unittest.IsolatedAsyncioTestCase):
     async def test_custom_truth_dare_and_backup_roundtrip(self):
         await self.page.goto(URL + '#/j/verdadreto')
         await self.page.get_by_text('✏️ Contenido propio', exact=True).click()
+        await self.page.get_by_text('Entrada masiva avanzada', exact=True).click()
         await self.page.get_by_label('Tus verdades', exact=True).fill('¿Cuál sería tu plan perfecto?')
         await self.page.get_by_label('Tus retos', exact=True).fill('Imita a {j}.')
         await self.page.get_by_role('button', name='Guardar', exact=True).click()
-        await expect(self.page.get_by_text('2 guardadas', exact=True)).to_be_visible()
+        await expect(self.page.get_by_text('2 tarjetas guardadas.', exact=True)).to_be_visible()
         await self.page.reload()
         self.assertEqual(await self.page.evaluate("Corrillo.content.verdadreto.reto.custom[0]"), 'Imita a {j}.')
         await self.page.goto(URL + '#/datos')
@@ -213,7 +214,7 @@ class Regression(unittest.IsolatedAsyncioTestCase):
                 await self.page.get_by_role('button', name='Subir un poco', exact=True).click()
             await self.page.get_by_role('button', name='Ocultar y pasar el móvil' if i == 0 else 'Ocultar y continuar', exact=True).click()
         await expect(self.page.locator('.scores .score b')).to_have_text(['1 pt', '1 pt'])
-        self.assertEqual(await self.page.evaluate("Corrillo.store.get('night')"), {'Ana': 1, 'Luis': 1})
+        self.assertEqual(await self.page.evaluate("Corrillo.store.get('night',{})"), {})
         await self.page.get_by_role('button', name='Ajustes', exact=True).click()
         await self.page.get_by_text('Tarjetas disponibles', exact=True).click()
         await expect(self.page.locator('[data-deck=aojo]')).to_contain_text('quedan 1 de 2')
@@ -238,14 +239,15 @@ class Regression(unittest.IsolatedAsyncioTestCase):
         await expect(self.page.get_by_role('heading', name='5 segundos', exact=True)).to_be_visible()
         self.assertEqual(await self.page.evaluate("Corrillo.store.get('used:prefieres',[]).length"), 2)
 
-    async def test_party_can_start_and_skip_all_26_games(self):
+    async def test_party_can_start_and_skip_all_28_games(self):
         await self.page.goto(URL + '#/j/fiesta')
+        await self.page.get_by_text('Categorías y reglas avanzadas', exact=True).click()
         await self.page.get_by_role('button', name='Quitar todos', exact=True).click()
         await expect(self.page.get_by_role('button', name='Empezar', exact=True)).to_be_disabled()
         await self.page.get_by_role('button', name='Solo rápidos', exact=True).click()
         self.assertEqual(await self.page.evaluate("Corrillo.store.get('cfg:fiesta').s.cats.length"), 10)
         await self.page.get_by_role('button', name='Todos compatibles', exact=True).click()
-        self.assertEqual(await self.page.evaluate("Corrillo.store.get('cfg:fiesta').s.cats.length"), 26)
+        self.assertEqual(await self.page.evaluate("Corrillo.store.get('cfg:fiesta').s.cats.length"), 28)
         await self.page.get_by_role('button', name='En orden', exact=True).click()
         games = await self.page.evaluate("Corrillo.games.filter(g=>!g.hidden).map(g=>({id:g.id,name:g.name}))")
         await self.page.get_by_role('button', name='Empezar', exact=True).click()
@@ -303,7 +305,7 @@ class Regression(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await self.page.evaluate("caches.keys().then(keys=>caches.open(keys.find(k=>k.startsWith('corrillo-v')))).then(c=>c.match(new URL('css/styles.css',location.href).href)).then(r=>r.status)"), 200)
             await self.context.set_offline(True)
             await self.page.reload()
-            await expect(self.page.locator('.gcard')).to_have_count(26)
+            await expect(self.page.locator('.gcard')).to_have_count(28)
             await self.page.get_by_role('link', name='📏 A ojo', exact=False).click()
             await self.page.get_by_role('button', name='Empezar', exact=True).click()
             await expect(self.page.locator('.play')).to_be_visible()

@@ -8,10 +8,10 @@
   const sol = (a, u) => C.big(a) + (u ? ' ' + u : '');
   const isYear = (it) => !it[2] && it[3] >= 500;
   const singles = C.estimatePool;
-  const dialFor = (it) => C.dial(isYear(it) ? { min: it[3], max: it[4] } : { unit: it[2] });
+  const dialFor = (it) => C.dial(isYear(it) ? { min: 1, max: new Date().getFullYear(), unit: 'año' } : /^(%|por ciento|porcentaje)$/.test(it[2]) ? { min: 0, max: 100, unit: it[2] } : { unit: it[2] });
   /* Tarjeta de pregunta. Los artículos de «Precio justo» traen además emoji, subtítulo y foto opcional. */
   const qCard = (it, small) => (it[5]
-    ? h('div', { class: 'card q' }, it[7] ? h('img', { class: 'pic', src: it[7], alt: '' }) : h('div', { class: 'pic' }, it[5]), it[0], h('p', { class: 'muted small', style: 'font-weight:500;margin-top:6px' }, it[6]))
+    ? h('div', { class: 'card q' }, it[7] ? h('img', { class: 'pic', src: it[7], alt: '', onerror: (event) => event.currentTarget.replaceWith(h('div', { class: 'pic', 'aria-label': 'Foto no disponible' }, it[5])) }) : h('div', { class: 'pic' }, it[5]), it[0], h('p', { class: 'muted small', style: 'font-weight:500;margin-top:6px' }, it[6]))
     : h('div', { class: 'card q' }, small && h('small', null, small), it[0]));
   /* Distancia entre una estimación y la respuesta: diferencia simple. Gana siempre quien más cerca se queda. */
   const gap = (it, a) => Math.abs(a - it[1]);
@@ -19,11 +19,21 @@
 
   function collect(ctx, P, qFor, done) {
     const ans = [];
-    C.pass(ctx, P, (p, i) => {
+    const card = (p, i) => {
       const it = qFor(i), inp = dialFor(it);
       return { node: h('div', { class: 'stack' }, qCard(it, 'Tu pregunta'), inp.el),
         before: () => (inp.value() == null ? 'Desliza la barra para marcar tu cifra.' : void (ans[i] = inp.value())) };
-    }, () => done(ans), { verb: 'Ver mi pregunta' });
+    };
+    if (ctx.s.interaction === 'public' && ctx.game.id !== 'cifras') {
+      let i = 0;
+      function next() {
+        if (i === P.length) return done(ans);
+        const item = card(P[i], i), error = h('p', { class: 'warn', role: 'status' });
+        ctx.show(h('div', { class: 'center' }, h('h2', null, 'Estimación de ' + P[i]), item.node, error,
+          btn('Confirmar estimación', () => { const problem = item.before(); if (problem) error.textContent = problem; else { i++; next(); } }, 'primary big')));
+      }
+      next();
+    } else C.pass(ctx, P, card, () => done(ans), { verb: 'Ver mi pregunta' });
   }
   /* Al final se amplía la barra a escala lineal entre la cifra más baja y la más alta (con margen) para ver las distancias reales. */
   function zoomOf(it, ans) {
@@ -33,7 +43,7 @@
     lo = isYear(it) ? Math.floor(lo - pad) : Math.max(0, lo - pad); hi = isYear(it) ? Math.ceil(hi + pad) : hi + pad;
     return { min: lo, max: hi, fmt: fmtN(it) };
   }
-  const plot = (it, P, ans) => C.plot(P.map((p, i) => [p, ans[i]]), it[1], isYear(it) ? { min: it[3], max: it[4] } : null, zoomOf(it, ans));
+  const plot = (it, P, ans) => C.plot(P.map((p, i) => [p, ans[i]]), it[1], isYear(it) ? { min: 1, max: new Date().getFullYear() } : null, zoomOf(it, ans));
 
   C.register({
     id: 'cifras', name: 'Impostor de cifras', emoji: '🔢', color: '#3dd6a3', group: 'deduccion', min: 3,
@@ -42,6 +52,7 @@
       'Cada jugador lee en privado una pregunta de respuesta numérica y marca su estimación.',
       'El impostor recibe una pregunta distinta, de magnitud parecida.',
       'Se muestran la pregunta común y todas las cifras con nombre.',
+      'Compartid solo las cifras, sin revelar el enunciado ni las unidades de vuestra pregunta privada.',
       'Deducid qué cifra no cuadra, descubrid al impostor y comprobad la solución.',
     ],
     cats,
@@ -63,7 +74,7 @@
           h('p', { class: 'muted' }, '¿Qué cifra no cuadra? Debatid antes de revelar.'), extra));
         extra.append(step('Descubrir al impostor', () => {
           extra.replaceChildren(C.secret('🕵️', s.impostors > 1 ? 'Los impostores eran' : 'El impostor era', imp.map((i) => P[i]).join(', '), 'Su pregunta: ' + B[0] + ' (' + sol(B[1], B[2]) + ')'),
-            step('Ver la solución', () => extra.lastChild.replaceWith(C.secret('✅', 'La respuesta correcta', sol(A[1], A[2])), plot(A, P, ans), ctx.endBar('Otra ronda'))));
+            step('Ver la solución', () => extra.lastChild.replaceWith(C.secret('✅', 'La respuesta correcta', sol(A[1], A[2])), plot(A, P, ans), C.sourceNote(A[0]), C.sourceNote(B[0]), ctx.endBar('Otra ronda'))));
         }));
       });
     },
@@ -81,18 +92,22 @@
         btn('⏭️ Ya la conocemos: otra pregunta', () => { C.skip(key); round--; next(); }, 'small')));
       function result(ans) {
         C.commit();
-        const diff = ans.map((a) => gap(it, a)), best = Math.min(...diff), worst = Math.max(...diff);
-        diff.forEach((d, i) => { if (d === best) pts[i]++; });
-        const order = P.map((_, i) => i).sort((a, b) => diff[a] - diff[b]);
+        const diff = ans.map((a) => gap(it, a)), eligible = ans.map((a) => s.rule !== 'under' || a <= it[1]);
+        const best = Math.min(...diff.map((d, i) => eligible[i] ? d : Infinity)), worst = Math.max(...diff);
+        diff.forEach((d, i) => { if (eligible[i] && d === best) pts[i]++; });
+        ctx.progress = { names: P.slice(), points: pts.slice(), unit: ' pts', type: 'competitive', complete: false };
+        const order = P.map((_, i) => i).sort((a, b) => Number(eligible[b]) - Number(eligible[a]) || diff[a] - diff[b]);
         const last = round >= s.rounds;
         ctx.show(h('div', { class: 'center' }, h('div', { class: 'card q' }, h('small', null, it[0]), sol(it[1], it[2])), plot(it, P, ans),
-          h('div', { class: 'list' }, order.map((i) => h('div', { class: 'item' + (diff[i] === best ? ' hit' : '') }, h('span', null, (diff[i] === best ? '🎯 ' : '') + P[i]), h('b', null, fmtN(it)(ans[i]) + (it[2] && !isYear(it) ? ' ' + it[2] : ''), h('small', { class: 'dist' }, diff[i] ? (ans[i] > it[1] ? '+' : '−') + fmtN(it)(diff[i]) : '¡exacto!'))))),
+          !Number.isFinite(best) && h('p', { class: 'lead' }, 'Todos os habéis pasado: nadie suma punto.'),
+          h('div', { class: 'list' }, order.map((i) => h('div', { class: 'item' + (eligible[i] && diff[i] === best ? ' hit' : '') }, h('span', null, (eligible[i] && diff[i] === best ? '🎯 ' : '') + P[i]), h('b', null, fmtN(it)(ans[i]) + (it[2] && !isYear(it) ? ' ' + it[2] : ''), h('small', { class: 'dist' }, !eligible[i] ? 'Se ha pasado' : diff[i] ? (ans[i] > it[1] ? '+' : '−') + fmtN(it)(diff[i]) : '¡exacto!'))))),
           !last && worst !== best && C.penalty(P[order[order.length - 1]]),
           C.sourceNote(it[0]), last ? ctx.finish(P, pts, ' pts') : btn('Siguiente ronda', next, 'primary big')));
       }
     })();
   }
   const rounds = { key: 'rounds', label: 'Rondas', type: 'step', def: 5, min: 1, max: 15 };
+  const interaction = { key: 'interaction', label: 'Estimaciones', type: 'select', def: 'private', options: [['private', 'Privadas, pasando el móvil'], ['public', 'Públicas, móvil en el centro']] };
 
   C.register({
     id: 'aojo', name: 'A ojo', emoji: '📏', color: '#ffc93c', group: 'palabras', min: 2,
@@ -103,7 +118,7 @@
       'Se muestran todas las cifras sobre la misma barra, junto a la solución.',
       'Quien más se acerque gana un punto. Al final de las rondas, gana quien tenga más.',
     ],
-    cats: allCats, settings: [rounds],
+    cats: allCats, settings: [rounds, interaction],
     play: (ctx) => estimate(ctx, 'aojo', singles(ctx.s)),
   });
 
@@ -117,7 +132,7 @@
       'Quien más se acerque gana un punto.',
     ],
     cats: [{ id: 'tecno', label: '📱 Tecnología' }, { id: 'lujo', label: '💎 Caprichos y subastas' }, { id: 'historia', label: '🏛️ Historia y ciencia' },{ id: 'negocios', label: '💼 Fichajes y compras' }],
-    settings: [rounds],
+    settings: [rounds, interaction, { key: 'rule', label: 'Regla de puntuación', type: 'select', def: 'distance', options: [['distance', 'Menor diferencia absoluta'], ['under', 'Más cercano sin pasarse']] }],
     play: (ctx) => estimate(ctx, 'precio', C.pool(C.content.precios, ctx.s.cats)),
   });
 
@@ -130,7 +145,7 @@
       'En vez de subir, puedes desafiar: afirmas que el jugador anterior se ha pasado.',
       'Si la cifra real llega a la apuesta, gana quien apostó; si no, gana quien desafió.',
     ],
-    cats: allCats, settings: [rounds],
+    cats: allCats, settings: [rounds, { key: 'decision', label: 'Tiempo para decidir', type: 'select', def: 0, options: [[0, 'Sin reloj'], [10, '10 s'], [20, '20 s'], [30, '30 s']] }],
 
     play(ctx) {
       const P = ctx.players, s = ctx.s, n = P.length, pts = P.map(() => 0);
@@ -141,27 +156,35 @@
         const it = C.draw('subasta', pool);
         let bid = null, bidder = -1;
         (function turn() {
-          const d = C.dial({ unit: it[2] }), err = h('p', { class: 'warn' });
+          let clock = null, settled = false;
+          const d = C.dial({ unit: it[2], value: bid }), err = h('p', { class: 'warn' });
+          const challenge = () => {
+            if (settled) return; settled = true; if (clock) clock.stop(); C.commit();
+            const ok = it[1] >= bid, win = ok ? bidder : cur, lose = ok ? cur : bidder, last = round >= s.rounds;
+            pts[win]++; cur = lose;
+            ctx.progress = { names: P.slice(), points: pts.slice(), unit: ' pts', type: 'competitive', complete: false };
+            ctx.show(h('div', { class: 'center' }, h('div', { class: 'card q' }, h('small', null, it[0]), sol(it[1], it[2])),
+              h('h2', null, ok ? P[win] + ' no se había pasado' : P[lose] + ' se había pasado'),
+              h('p', { class: 'lead' }, 'La cifra real ' + (ok ? 'alcanza' : 'no alcanza') + ' la apuesta de ' + sol(bid, it[2]) + '. Punto para ' + P[win] + '.'),
+              C.sourceNote(it[0]), !last && C.penalty(P[lose]), last ? ctx.finish(P, pts, ' pts') : btn('Siguiente ronda', next, 'primary big')));
+          };
+          if (s.decision) clock = C.clock(ctx, s.decision, () => {
+            if (bid != null) challenge(); else { settled = true; cur = (cur + 1) % n; turn(); }
+          });
           ctx.show(h('div', { class: 'center' }, h('p', { class: 'pill' }, 'Ronda ' + round + ' de ' + s.rounds), qCard(it),
+            clock && clock.el,
             bid == null ? h('p', { class: 'lead' }, 'Abre la subasta ' + P[cur] + '.') : h('div', { class: 'card pen' }, h('small', null, 'Apuesta de ' + P[bidder]), 'Al menos ' + sol(bid, it[2])),
             bid != null && h('h2', null, 'Le toca a ' + P[cur]), d.el, err,
-            bid == null && btn('⏭️ Ya la conocemos: otra pregunta', () => { C.skip('subasta'); round--; next(); }, 'small'),
+            h('div', { class: 'chips' }, [1, 10, 100, 1000].map((increment) => btn('+' + C.num(increment), () => d.set((d.value() || 0) + increment), 'small'))),
+            bid == null && btn('⏭️ Ya la conocemos: otra pregunta', () => { if (clock) clock.stop(); C.skip('subasta'); round--; next(); }, 'small'),
             btn(bid == null ? 'Apostar' : 'Subir la apuesta', () => {
               const v = d.value();
               if (v == null || (bid != null && v <= bid)) { err.textContent = bid == null ? 'Marca tu apuesta en la barra.' : 'Tu cifra tiene que superar ' + C.big(bid) + '.'; return; }
+              if (settled) return; settled = true; if (clock) clock.stop();
               bid = v; bidder = cur; cur = (cur + 1) % n;
               turn();
             }, 'primary big'),
-            bid != null && btn('¡Te has pasado! Desafiar a ' + P[bidder], () => {
-              C.commit();
-              const ok = it[1] >= bid, win = ok ? bidder : cur, lose = ok ? cur : bidder, last = round >= s.rounds;
-              pts[win]++;
-              cur = lose;
-              ctx.show(h('div', { class: 'center' }, h('div', { class: 'card q' }, h('small', null, it[0]), sol(it[1], it[2])),
-                h('h2', null, ok ? P[win] + ' no se había pasado' : P[lose] + ' se había pasado'),
-                h('p', { class: 'lead' }, 'La apuesta era de al menos ' + sol(bid, it[2]) + '. Punto para ' + P[win] + '.'),
-                C.sourceNote(it[0]), !last && C.penalty(P[lose]), last ? ctx.finish(P, pts, ' pts') : btn('Siguiente ronda', next, 'primary big')));
-            }, 'no big')));
+            bid != null && btn('¡Te has pasado! Desafiar a ' + P[bidder], challenge, 'no big')));
         })();
       })();
     },

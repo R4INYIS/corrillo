@@ -63,7 +63,7 @@
       function flecha() {
         let rot = 0;
         const arrow = h('div', { class: 'arrow', html: '<svg viewBox="0 0 100 100" width="72%" aria-hidden="true"><path d="M50 6 84 48H63v46H37V48H16z" fill="#1d1a2f" stroke="#fff" stroke-width="4" stroke-linejoin="round"/></svg>' });
-        const spin = () => { rot += 1440 + C.rnd(360); arrow.style.transform = 'rotate(' + rot + 'deg)'; C.buzz(30); };
+        const spin = () => { rot += (C.reducedMotion() ? 0 : 1440) + C.rnd(360); arrow.style.transform = 'rotate(' + rot + 'deg)'; C.buzz(30); };
         ctx.show(h('div', { class: 'center' }, h('p', { class: 'muted' }, 'Dejad el móvil plano en el centro y sentaos alrededor.'),
           h('div', { class: 'spinbox', onclick: spin }, arrow), btn('Girar la flecha', spin, 'primary big')));
       }
@@ -86,19 +86,25 @@
           out.textContent = ' ';
           const n = items.length, slice = 360 / n, k = C.rnd(n);
           const center = (k + 0.5) * slice + (Math.random() - 0.5) * slice * 0.7;
-          rot = Math.ceil(rot / 360) * 360 + 360 * 5 + (360 - center);
+          rot = Math.ceil(rot / 360) * 360 + (C.reducedMotion() ? 0 : 360 * 5) + (360 - center);
           wheel.style.transform = 'rotate(' + rot + 'deg)';
           to = setTimeout(() => {
             out.textContent = '🎉 ' + items[k];
             C.sound.ok();
             C.buzz(200);
-            if (ctx.s.remove && items.length > 2) to = setTimeout(() => { items.splice(k, 1); build(); busy = false; }, 1600);
+            if (ctx.s.remove && items.length > 1) to = setTimeout(() => {
+              items.splice(k, 1); build(); busy = false;
+              if (items.length === 1) { out.textContent = '🏆 Última opción: ' + items[0]; spinButton.disabled = true; }
+            }, C.reducedMotion() ? 100 : 1600);
             else busy = false;
-          }, 4300);
+          }, C.reducedMotion() ? 100 : 4300);
         }
         build();
         box.addEventListener('click', spin);
-        ctx.show(h('div', { class: 'center' }, out, box, btn('Girar la ruleta', spin, 'primary big'), btn('Ajustes', ctx.setup, 'small')));
+        const spinButton = btn('Girar la ruleta', spin, 'primary big');
+        ctx.show(h('div', { class: 'center' }, out, box, spinButton, btn('Reiniciar opciones', () => {
+          clearTimeout(to); items = ctx.players.slice(); busy = false; spinButton.disabled = false; out.textContent = ' '; build();
+        }, 'small'), btn('Ajustes', ctx.setup, 'small')));
       }
     },
   });
