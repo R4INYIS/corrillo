@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fff6e5">
+  <meta name="description" content="Corrillo: minijuegos sociales para jugar en grupo con un solo móvil.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Corrillo">
+  <title>Corrillo · Minijuegos para jugar en grupo</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="app"></div>
+  <noscript>Corrillo necesita JavaScript para funcionar.</noscript>
+
+  <!-- Núcleo -->
+  <script src="js/core/core.js"></script>
+  <!-- Contenido (preguntas, palabras, retos…) separado del código -->
+  <script src="js/content/deduccion.js"></script>
+  <script src="js/content/cifras.js"></script>
+  <script src="js/content/preguntas.js"></script>
+  <script src="js/content/palabras.js"></script>
+  <script src="js/content/universidad.js"></script>
+  <script src="js/content/nuevos.js"></script>
+  <script src="js/content/ampliacion.js"></script>
+  <script src="js/content/creditos.js"></script>
+  <!-- Minijuegos: el orden de carga es el orden en el menú -->
+  <script src="js/games/impostor.js"></script>
+  <script src="js/games/mentiroso.js"></script>
+  <script src="js/games/lobos.js"></script>
+  <script src="js/games/cifras.js"></script>
+  <script src="js/games/espia.js"></script>
+  <script src="js/games/verdadreto.js"></script>
+  <script src="js/games/tarjetas.js"></script>
+  <script src="js/games/puntos.js"></script>
+  <script src="js/games/rapidez.js"></script>
+  <script src="js/games/nuevos.js"></script>
+  <script src="js/games/azar.js"></script>
+  <script src="js/games/fiesta.js"></script>
+</body>
+</html>

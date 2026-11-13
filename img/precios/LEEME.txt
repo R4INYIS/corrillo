@@ -1,0 +1,8 @@
+Fotos del juego «Precio justo» (Wikimedia Commons: dominio público o licencia libre).
+Para añadir una foto:
+  1. Guárdala aquí (por ejemplo ps5.jpg), a 640 px de ancho como mucho.
+  2. Añade su ruta al final del artículo en js/content/nuevos.js:
+     ['PlayStation 5', 499, '€', 0, 0, '🎮', 'Precio de lanzamiento…', 'img/precios/ps5.jpg'],
+  3. Añade el autor y la licencia en js/content/creditos.js (se muestran en la página de créditos).
+  4. Añade la ruta a la lista FILES de sw.js y sube VERSION.
+Si un artículo no tiene foto, se muestra su emoji.
