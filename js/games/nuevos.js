@@ -143,6 +143,7 @@
     const set = (v) => { value = Math.max(0, Math.min(100, Math.round(v * 2) / 2)); needle.setAttribute('transform', 'rotate(' + (value / 100 * 180 - 90) + ' ' + CX + ' ' + CY + ')'); svg.setAttribute('aria-valuenow', value); };
     if (value != null) { svg.append(needle); set(value); }
     if (onChange) {
+      svg.setAttribute('aria-valuemin', 0); svg.setAttribute('aria-valuemax', 100);
       let drag = false;
       const move = (e) => {
         const r = svg.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * 220 - CX, y = CY - (e.clientY - r.top) / r.height * 122;
@@ -152,7 +153,12 @@
       svg.addEventListener('pointerdown', (e) => { drag = true; try { svg.setPointerCapture(e.pointerId); } catch (x) {} move(e); });
       svg.addEventListener('pointermove', (e) => drag && move(e));
       ['pointerup', 'pointercancel'].forEach((ev) => svg.addEventListener(ev, () => (drag = false)));
-      svg.addEventListener('keydown', (e) => { const d = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0; if (d) { e.preventDefault(); set(value + d); onChange(value); } });
+      svg.addEventListener('keydown', (e) => {
+        if (!['ArrowLeft', 'ArrowDown', 'ArrowRight', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+        e.preventDefault();
+        set(e.key === 'Home' ? 0 : e.key === 'End' ? 100 : value + (e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : 1));
+        onChange(value);
+      });
     }
     return h('div', { class: 'mm' }, svg, h('div', { class: 'mm-ends' }, h('span', null, '← ' + L), h('span', null, R + ' →')));
   }

@@ -35,7 +35,7 @@ Documento de traspaso para continuar el desarrollo desde Claude Code (u otro asi
 | Regresiones de interfaz y PWA | `python tests/regression.py` (Chrome; `pip install -r tests/requirements.txt`) |
 | Prueba de humo | `python tests/smoke.py [id …]` (necesita `pip install playwright` y Chrome). Juega cada juego (o solo los indicados) con ajustes al azar pulsando botones al azar y falla si hay errores de JavaScript. Todos tardan 10–15 minutos |
 
-El service worker (`sw.js`) solo se registra bajo `http(s)`, no en `file://`. Usa red primero y recupera la copia guardada también ante errores HTTP; no guarda respuestas de error ni devuelve HTML en lugar de scripts o imágenes. Solo borra cachés cuyo nombre empieza por `corrillo-v`. **Al añadir o quitar archivos hay que actualizar `FILES` y subir `VERSION`** (ahora `corrillo-v7`). El menú indica cuándo está preparado el modo sin conexión. Las actualizaciones esperan a cerrar la app o a pulsar «Actualizar» desde el menú, sin interrumpir partidas. El arranque sin conexión y la recuperación ante un HTTP 503 se comprueban en Chrome; la instalación real en Android e iPhone sigue pendiente.
+El service worker (`sw.js`) solo se registra bajo `http(s)`, no en `file://`. Usa red primero y recupera la copia guardada también ante errores HTTP; no guarda respuestas de error ni devuelve HTML en lugar de scripts o imágenes. Solo borra cachés cuyo nombre empieza por `corrillo-v`. **Al añadir o quitar archivos hay que actualizar `FILES` y subir `VERSION`** (ahora `corrillo-v8`). El menú indica cuándo está preparado el modo sin conexión. Las actualizaciones esperan a cerrar la app o a pulsar «Actualizar» desde el menú, sin interrumpir partidas. El arranque sin conexión y la recuperación ante un HTTP 503 se comprueban en Chrome; la instalación real en Android e iPhone sigue pendiente.
 
 ## 4. Estructura de archivos
 
@@ -86,7 +86,7 @@ C.register({
   cats: [{ id, label, spicy? }],          // categorías de contenido (opcional)
   settings: [{ key, label, type: 'toggle' | 'step' | 'select', def, min, max, options, help, show(s) }],
   validate(s, n) { return 'texto de error' || null; },
-  party: true,                            // entra en el Modo fiesta (debe llamar a ctx.turn())
+  party: true,                            // rotación por turnos cortos en Fiesta (debe llamar a ctx.turn())
   custom: { bank: 'claveEnContent', hint: '…', fix(linea) },   // contenido propio del grupo
   play(ctx) { ... },
 });
@@ -124,19 +124,25 @@ C.register({
 - **Funciones generales:** `C.penalty(nombre)` (tarjeta de castigo o `null`), `C.shareBtn(titulo, lineas, color)` (imagen en canvas → Web Share o descarga), `C.say(texto)` (voz del navegador), `C.sound` (pitidos con WebAudio), `C.buzz` (vibración), `C.sub` y `C.canPlay` (Modo fiesta).
 
 ### Claves de `localStorage` (prefijo `corrillo:`)
-`cfg:<id>` (jugadores, ajustes y categorías conocidas de cada juego) · `used:<clave>` (cartas ya jugadas) · `custom:<id>` (contenido propio; en Verdad o Reto, `{verdad: [], reto: []}`) · `last` · `fav` · `recent` · `night` (marcador) · `pen` · `sound` · `menu` (filtros, sin lista global de jugadores).
+`cfg:<id>` (jugadores, ajustes y categorías conocidas de cada juego) · `used:<clave>` (cartas ya jugadas) · `custom:<id>` (contenido propio; en Verdad o Reto, `{verdad: [], reto: []}`) · `last` · `fav` · `recent` · `night` (marcador) · `pen` · `sound`.
+
+La búsqueda y los filtros del menú viven solo en memoria: se conservan entre rutas del mismo documento y se reinician al recargar. La antigua clave `menu` se elimina al arrancar y se ignora al restaurar copias anteriores. No se incluyen filtros en las copias nuevas. El menú muestra el número de juegos distintos que coinciden, permite limpiar todos los criterios y ofrece una salida clara cuando no hay resultados.
 
 Las categorías nuevas no picantes se activan solas en configuraciones ya guardadas gracias a la lista `known` de `cfg:<id>`.
+
+Excepción: los 16 juegos adicionales de Fiesta usan `optional: true` en sus categorías para conservar la selección rápida anterior hasta que el grupo elija ampliarla. `categoryPresets` permite seleccionar todos los juegos compatibles, solo los rápidos o ninguno.
 
 Los ajustes numéricos se normalizan antes de guardarlos y también al cargarlos. Los nombres repetidos tras ignorar mayúsculas y espacios impiden iniciar la partida (salvo las opciones de Al azar). El marcador fusiona esas variantes de nombres anteriores y permite añadir y quitar victorias. `C.pool` elimina coincidencias entre categorías para que no aumenten la probabilidad de una tarjeta.
 
 `library.js` define `C.catalog` (estilo y minutos orientativos con cuatro jugadores), `C.decks(g,s)` (mazos e historial de cada juego), `C.exportData`, `C.readBackup` y `C.importData`. Las copias JSON solo contienen claves de Corrillo, se validan completas antes de restaurarlas y revierten las escrituras ante falta de espacio. No incluyen las fotos ni el contenido de fábrica.
 
-El Modo fiesta usa `s.spicy` (desactivado por defecto) para activar o excluir categorías picantes en toda la sesión; desactivado también evita «Beber» y la regla de beber de Yo nunca. No modifica los ajustes guardados de los juegos. El contenido propio no tiene clasificación automática de tono. Cada subjuego tiene su propia limpieza y botón «Saltar al siguiente juego», que descarta la tarjeta pendiente y cancela temporizadores. La vista previa muestra juegos y categorías efectivos.
+El Modo fiesta admite los 26 juegos del catálogo. Los que tienen `party: true` alternan tras `s.limit` turnos; los demás completan su ronda o partida con los ajustes guardados y continúan desde `ctx.endBar()`. Al azar no tiene un final automático: se usa el botón de salto cuando el grupo termine. `s.spicy` (desactivado por defecto) controla las categorías picantes de toda la sesión; desactivado también evita «Beber» y la regla de beber de Yo nunca. No modifica los ajustes guardados de los juegos. El contenido propio no tiene clasificación automática de tono. Cada subjuego tiene su propia limpieza y botón «Saltar al siguiente juego», que descarta la tarjeta pendiente y cancela temporizadores y narración. La vista previa muestra juegos, formato y categorías efectivos.
+
+Las confirmaciones usan `<dialog>` modal, bloquean la interacción con el fondo, mantienen Tab dentro de sus botones, admiten Escape y restauran el foco al cerrar. El dial numérico y la rueda declaran sus límites y valor para accesibilidad y admiten flechas, Inicio y Fin sin desplazar la página. Los botones del dial usan clic sintético para teclado y tecnologías de apoyo, evitando contar dos veces los toques normales. Esto no sustituye las pruebas pendientes con lectores de pantalla y móviles reales.
 
 ## 6. Los 26 juegos
 
-| id | Nombre | Grupo | Mín. | Archivo | Fiesta | Contenido propio |
+| id | Nombre | Grupo | Mín. | Archivo | Turnos rápidos en Fiesta | Contenido propio |
 |---|---|---|---|---|---|---|
 | impostor | Impostor | deducción | 3 | impostor.js | | sí |
 | mentiroso | ¿Quién miente? | deducción | 3 | mentiroso.js | | sí |
@@ -165,7 +171,7 @@ El Modo fiesta usa `s.spicy` (desactivado por defecto) para activar o excluir ca
 | contrasena | Contraseña | palabras | 2 | nuevos.js | | |
 | azar | Al azar (dedos, flecha, ruleta) | palabras | 0 | azar.js | | |
 
-Además, `fiesta` (**Modo fiesta**, `fiesta.js`) está registrado como juego oculto: sus «categorías» son los juegos con `party: true`.
+Además, `fiesta` (**Modo fiesta**, `fiesta.js`) está registrado como juego oculto: sus «categorías» son los 26 juegos visibles. La marca `party: true` solo distingue los que admiten rotación por turnos cortos; todos se pueden añadir a Fiesta.
 
 **Equivalencias con Splash** (nombres cambiados a propósito): A ojo = Circa · Impostor de cifras = Circa Impostor · ¿Detallazo o lo mínimo? = Princess Treatment · ¿Verdad o invento? = Fake or Fact · Apuesto a que… = Bet Buddy · Palabras prohibidas = Taboom · Al azar = Chooser · Rompehielos = 100 preguntas · En la misma onda = Mind Match (reglas tipo «Wavelength», definidas por Sergio) · Contraseña = «tabú inverso».
 
@@ -268,3 +274,4 @@ Sergio ha probado la versión anterior en su móvil sin detectar problemas. Sigu
 5. Noviembre de 2026 (Claude Code): fotos de Precio justo y página de créditos; Precio justo pasa de 28 a 70 artículos; En la misma onda con rueda semicircular; A ojo e Impostor de cifras con preguntas de nivel medio-alto; revisión de todo el contenido y ampliación (`ampliacion.js`) con categorías nuevas.
 6. Noviembre de 2026: git y publicación (repositorio público R4INYIS/corrillo + GitHub Pages); prueba en móvil real; escalas de En la misma onda reescritas con un solo eje; mazos que solo guardan una carta como jugada al terminar su ronda, con botón «Saltar» en los juegos donde tiene sentido; A ojo, Precio justo e Impostor de cifras puntúan por diferencia simple y muestran los resultados en escala lineal ampliada con la distancia de cada jugador.
 7. Noviembre de 2026: corrección de ajustes al reducir jugadores y de la caché ante errores HTTP; filtros del menú; picante, vista previa y salto de juego en fiesta; marcador normalizado y editable; historial visible; contenido propio en Verdad o Reto; copias JSON; 78 entradas nuevas con fuentes de sus datos y pruebas automáticas de lógica, interfaz y PWA. La revisión específica de funciones móviles y los cambios estéticos quedan para la siguiente fase.
+8. Noviembre de 2026: filtros y búsqueda temporales que se limpian al recargar, contador y limpieza del menú; los 26 juegos disponibles en Fiesta, con selección de todos los compatibles, rápidos o ninguno; conservación de la selección anterior; limpieza de narración al saltar; confirmaciones y controles numéricos mejorados para teclado y accesibilidad, con regresiones específicas.

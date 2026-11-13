@@ -14,10 +14,10 @@ function worker(fetcher) {
   };
   const context = {
     URL, Set, Response, fetch: fetcher,
-    caches: { open: async () => cache, keys: async () => ['corrillo-v6', 'corrillo-v7', 'otra-app'], delete: async (key) => deleted.push(key) },
+    caches: { open: async () => cache, keys: async () => ['corrillo-v0', context.cacheVersion, 'otra-app'], delete: async (key) => deleted.push(key) },
     self: { registration: { scope: SCOPE }, addEventListener: (name, fn) => (handlers[name] = fn), skipWaiting: () => state.skipped++, clients: { claim: async () => state.claimed++ } },
   };
-  vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8') + '\nglobalThis.cacheVersion = VERSION;', context);
   async function request(file, mode = 'cors') {
     let result;
     handlers.fetch({ request: { method: 'GET', url: new URL(file, SCOPE).href, mode }, respondWith: (promise) => (result = promise) });
@@ -62,7 +62,7 @@ test('activar borra solo versiones antiguas de Corrillo y la actualización espe
   w.handlers.install({ waitUntil: (promise) => (task = promise) }); await task;
   assert.equal(w.state.skipped, 0);
   w.handlers.activate({ waitUntil: (promise) => (task = promise) }); await task;
-  assert.deepEqual(w.deleted, ['corrillo-v6']);
+  assert.deepEqual(w.deleted, ['corrillo-v0']);
   assert.equal(w.state.claimed, 1);
   w.handlers.message({ data: { type: 'SKIP_WAITING' } });
   assert.equal(w.state.skipped, 1);

@@ -82,6 +82,33 @@ test('los filtros combinan tamaño de grupo, duración y estilo', () => {
   assert.equal(games.some((g) => C.catalog[g.id][1] > 5), false);
 });
 
+test('Fiesta ofrece los 26 juegos sin cambiar automáticamente una selección anterior', () => {
+  const { C } = loadApp();
+  const g = C.games.find((it) => it.id === 'fiesta');
+  const quick = C.games.filter((it) => it.party).map((it) => it.id);
+  assert.equal(g.cats.length, 26);
+  assert.equal(C.loadCfg(g).s.cats.length, quick.length);
+  C.store.set('cfg:fiesta', { players: ['', '', '', ''], s: { cats: quick }, known: quick });
+  assert.deepEqual(json(C.loadCfg(g).s.cats), json(quick));
+  const all = g.categoryPresets.find((p) => p.label === 'Todos compatibles').select({ spicy: false }, 4);
+  assert.equal(all.length, 26);
+  assert.ok(all.includes('lobos') && all.includes('azar') && all.includes('aojo'));
+  const two = g.categoryPresets.find((p) => p.label === 'Todos compatibles').select({ spicy: false }, 2);
+  assert.equal(two.includes('lobos'), false);
+  assert.equal(two.includes('impostor'), false);
+  assert.ok(two.includes('aojo') && two.includes('azar'));
+});
+
+test('las copias antiguas siguen siendo válidas pero sus filtros temporales se ignoran', () => {
+  const { C, storage } = loadApp();
+  C.store.set('menu', { players: 2, minutes: 5, style: 'accion' });
+  assert.equal(Object.hasOwn(C.exportData().data, 'menu'), false);
+  storage.removeItem('corrillo:menu');
+  C.importData({ app: 'Corrillo', version: 1, data: { menu: { players: 2, minutes: 5, style: 'accion' }, sound: false } });
+  assert.equal(C.store.get('menu', null), null);
+  assert.equal(C.store.get('sound'), false);
+});
+
 test('Verdad o Reto guarda, valida y restaura ambos tipos de contenido propio', () => {
   const { C } = loadApp();
   const g = C.games.find((it) => it.id === 'verdadreto');

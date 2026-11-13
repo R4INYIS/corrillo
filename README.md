@@ -44,7 +44,7 @@ Al publicar cambios, sube `VERSION` en `sw.js` para que los móviles descarguen 
 
 ## Funciones generales
 
-- **Modo fiesta** (`js/games/fiesta.js`): encadena rondas cortas de los juegos marcados con `party: true`, con una sola lista de jugadores. Un juego es compatible si llama a `ctx.turn()` al empezar cada tarjeta o turno.
+- **Modo fiesta** (`js/games/fiesta.js`): permite combinar los 26 juegos con una sola lista de jugadores. Los marcados con `party: true` llaman a `ctx.turn()` y alternan tras los turnos elegidos; los demás completan su ronda o partida y continúan desde `ctx.endBar()`. «Al azar» es una herramienta libre y se avanza con «Saltar al siguiente juego».
 - **Contenido propio**: los juegos con `custom: { bank, hint }` muestran un cuadro en su pantalla de ajustes; lo escrito se guarda en el dispositivo como categoría «Propias».
 - **Castigos** (`#/castigos`): `Corrillo.penalty(nombre)` devuelve una tarjeta con un castigo al azar, o nada si están desactivados.
 - **Marcador de la noche** (`#/marcador`): `ctx.finish(nombres, puntos, unidad)` pinta la clasificación final y suma una victoria a quien gane.
@@ -52,9 +52,11 @@ Al publicar cambios, sube `VERSION` en `sw.js` para que los móviles descarguen 
 - **Favoritos, recientes y juego al azar** en el menú; **«Usar los de la última partida»** en la configuración de cada juego.
 - **Fotos de Precio justo**: ver `img/precios/LEEME.txt`.
 
-El menú permite filtrar por número de jugadores, duración aproximada y estilo. «Al azar» respeta esos filtros. Los tiempos son orientativos para una partida breve con cuatro personas; los jugadores y ajustes siguen guardándose por juego.
+El menú permite filtrar por número de jugadores, duración aproximada y estilo. «Al azar» respeta esos filtros. La búsqueda y los filtros se conservan al volver al menú, pero se limpian al recargar la página; no se guardan en las copias. Hay un contador de juegos disponibles y botones para limpiar la búsqueda o recuperar todos los juegos si no hay coincidencias. Los tiempos son orientativos para una partida breve con cuatro personas; los jugadores y ajustes siguen guardándose por juego.
 
-El Modo fiesta tiene un control de picante para toda la sesión, vista previa de las categorías y botón para saltar al siguiente juego. El control desactivado también evita los castigos y la regla de beber. El tono de las tarjetas propias depende de quien las escriba.
+El Modo fiesta tiene «Todos compatibles», «Solo rápidos» y «Quitar todos», un control de picante para toda la sesión, vista previa de las categorías y botón para saltar al siguiente juego. Se conserva la selección anterior al actualizar; los juegos adicionales se activan expresamente. El control de picante desactivado también evita los castigos y la regla de beber. El tono de las tarjetas propias depende de quien las escriba.
+
+Las confirmaciones se pueden recorrer con Tab y cancelar con Escape; el foco vuelve al botón que las abrió. Las barras de estimación y la rueda de En la misma onda admiten flechas, Inicio y Fin. Los botones + y − también responden a activaciones de teclado y accesibilidad.
 
 El marcador fusiona nombres que solo difieran en mayúsculas o espacios y permite corregir victorias. Cada configuración muestra cuántas tarjetas quedan y permite reiniciar su historial. Verdad o Reto admite preguntas y retos propios en dos apartados.
 

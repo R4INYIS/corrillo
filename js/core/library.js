@@ -110,7 +110,7 @@
     const data = Object.create(null);
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key.startsWith('corrillo:')) {
+      if (key.startsWith('corrillo:') && key !== 'corrillo:menu') {
         const name = key.slice(9), value = JSON.parse(localStorage.getItem(key));
         validEntry(name, value);
         data[name] = value;
@@ -128,7 +128,7 @@
   };
   C.importData = (backup) => {
     const checked = C.readBackup(JSON.stringify(backup));
-    const entries = Object.entries(checked.data), previous = entries.map(([key]) => [key, localStorage.getItem('corrillo:' + key)]);
+    const entries = Object.entries(checked.data).filter(([key]) => key !== 'menu'), previous = entries.map(([key]) => [key, localStorage.getItem('corrillo:' + key)]);
     try { entries.forEach(([key, value]) => localStorage.setItem('corrillo:' + key, JSON.stringify(value))); }
     catch (e) {
       let restored = true;

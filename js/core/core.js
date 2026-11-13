@@ -172,13 +172,33 @@
   C.fmt = (s) => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   C.num = (v) => Number(v).toLocaleString('es-ES');
 
+  let confirmId = 0;
   C.confirm = function (text, yes, no) {
     return new Promise((res) => {
-      const close = (v) => { m.remove(); res(v); };
-      const m = h('div', { class: 'modal' },
-        h('div', { class: 'card' }, h('p', { class: 'lead' }, text),
-          h('div', { class: 'stack' }, btn(no || 'Cancelar', () => close(false), 'primary'), btn(yes || 'Aceptar', () => close(true)))));
+      const previous = document.activeElement, label = 'confirm-' + ++confirmId;
+      let settled = false;
+      const close = (v) => {
+        if (settled) return;
+        settled = true;
+        m.close(); m.remove();
+        if (previous && previous.isConnected) previous.focus({ preventScroll: true });
+        res(v);
+      };
+      const cancel = btn(no || 'Cancelar', () => close(false), 'primary');
+      cancel.autofocus = true;
+      const m = h('dialog', { class: 'modal', 'aria-labelledby': label },
+        h('div', { class: 'card' }, h('p', { id: label, class: 'lead' }, text),
+          h('div', { class: 'stack' }, cancel, btn(yes || 'Aceptar', () => close(true)))));
+      m.addEventListener('cancel', (e) => { e.preventDefault(); close(false); });
+      m.addEventListener('keydown', (e) => {
+        if (e.key !== 'Tab') return;
+        const buttons = m.querySelectorAll('button:not(:disabled)'), first = buttons[0], last = buttons[buttons.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      });
       document.body.append(m);
+      m.showModal();
+      cancel.focus({ preventScroll: true });
     });
   };
 
@@ -283,7 +303,7 @@
     const num = h('div', { class: 'dial-num' }), words = h('div', { class: 'dial-words' });
     const fill = h('div', { class: 'dial-fill' }), thumb = h('div', { class: 'dial-thumb' });
     const marks = lin ? [0, 0.25, 0.5, 0.75, 1].map((p) => [p, String(fromP(p))]) : [[0, '0'], [0.25, '1K'], [0.5, '1M'], [0.75, '1B'], [1, '1T']];
-    const track = h('div', { class: 'dial-track', role: 'slider', tabIndex: 0, 'aria-label': 'Tu estimación' }, h('div', { class: 'dial-rail' }, fill),
+    const track = h('div', { class: 'dial-track', role: 'slider', tabIndex: 0, 'aria-label': 'Tu estimación', 'aria-valuemin': lin ? o.min : 0, 'aria-valuemax': lin ? o.max : MAX }, h('div', { class: 'dial-rail' }, fill),
       Array.from({ length: lin ? 21 : 37 }, (_, i) => h('i', { class: 'dial-tick' + (i % (lin ? 5 : 3) ? '' : ' major'), style: 'left:' + (i / (lin ? 20 : 36)) * 100 + '%' })), thumb);
     function render() {
       const p = v == null ? 0 : toP(v);
@@ -291,7 +311,8 @@
       num.textContent = v == null ? '?' : lin ? String(v) : C.big(v);
       words.textContent = v == null ? 'Desliza para estimar' : lin ? ' ' : C.bigWords(v) || ' ';
       fill.style.width = thumb.style.left = p * 100 + '%';
-      track.setAttribute('aria-valuetext', num.textContent);
+      track.setAttribute('aria-valuenow', v == null ? lin ? o.min : 0 : v);
+      track.setAttribute('aria-valuetext', v == null ? 'Sin estimación. Usa las flechas o desliza para elegir.' : C.num(v) + (o.unit ? ' ' + o.unit : ''));
     }
     function nudge(dir) {
       const base = v == null ? (lin ? Math.round((o.min + o.max) / 2) : 0) : v;
@@ -304,7 +325,7 @@
       const b = h('button', { type: 'button', class: 'dial-nudge', 'aria-label': dir < 0 ? 'Bajar un poco' : 'Subir un poco' }, dir < 0 ? '−' : '+');
       b.addEventListener('pointerdown', () => { stop(); nudge(dir); t = setTimeout(() => (i = setInterval(() => (b.isConnected ? nudge(dir) : stop()), 60)), 380); });
       ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => b.addEventListener(ev, stop));
-      b.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') nudge(dir); });
+      b.addEventListener('click', (e) => { if (e.detail === 0) nudge(dir); });
       return b;
     }
     let drag = false;
@@ -312,7 +333,12 @@
     track.addEventListener('pointerdown', (e) => { drag = true; try { track.setPointerCapture(e.pointerId); } catch (x) {} move(e); });
     track.addEventListener('pointermove', (e) => { if (drag) move(e); });
     ['pointerup', 'pointercancel'].forEach((ev) => track.addEventListener(ev, () => (drag = false)));
-    track.addEventListener('keydown', (e) => { if (e.key === 'ArrowRight' || e.key === 'ArrowUp') nudge(1); if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') nudge(-1); });
+    track.addEventListener('keydown', (e) => {
+      if (!['ArrowRight', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
+      e.preventDefault();
+      if (e.key === 'Home' || e.key === 'End') { v = e.key === 'Home' ? lin ? o.min : 0 : lin ? o.max : MAX; render(); }
+      else nudge(e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : -1);
+    });
 
     const el = h('div', { class: 'dial' },
       h('div', { class: 'dial-read' }, hold(-1), h('div', { class: 'dial-screen' }, num, o.unit && h('div', { class: 'dial-unit' }, o.unit), words), hold(1)),
@@ -363,7 +389,7 @@
   function defaults(g) {
     const s = {};
     (g.settings || []).forEach((o) => (s[o.key] = o.def));
-    if (catsOf(g)) s.cats = catsOf(g).filter((c) => !c.spicy).map((c) => c.id);
+    if (catsOf(g)) s.cats = catsOf(g).filter((c) => !c.spicy && !c.optional).map((c) => c.id);
     const n = g.defPlayers != null ? g.defPlayers : Math.max(g.min || 0, 4);
     return { players: Array(n).fill(''), s };
   }
@@ -385,7 +411,7 @@
       const known = Array.isArray(c.known) ? c.known : [];
       const selected = Array.isArray(cfg.s.cats) ? cfg.s.cats : [];
       cfg.s.cats = selected.filter((id) => catsOf(g).some((k) => k.id === id))
-        .concat(catsOf(g).filter((k) => !k.spicy && !known.includes(k.id) && !selected.includes(k.id)).map((k) => k.id));
+        .concat(catsOf(g).filter((k) => !k.spicy && !k.optional && !known.includes(k.id) && !selected.includes(k.id)).map((k) => k.id));
     }
     return C.normalizeCfg(g, cfg);
   }
@@ -449,6 +475,7 @@
       });
       if (catsOf(g))
         rows.push(h('div', { class: 'srow col' }, h('div', { class: 'slabel' }, g.catsTitle || 'Categorías'),
+          g.categoryPresets && h('div', { class: 'chips category-presets' }, g.categoryPresets.map((preset) => btn(preset.label, () => { s.cats = preset.select(s, n); changed(); }, 'small'))),
           h('div', { class: 'chips' }, catsOf(g).map((c) => {
             const on = s.cats.includes(c.id);
             return h('button', { type: 'button', class: 'chip' + (on ? ' on' : '') + (c.spicy ? ' spicy' : ''), 'aria-pressed': String(on),
@@ -629,6 +656,7 @@
       active = sub.alive = false;
       cleanup.forEach((f) => { try { f(); } catch (e) {} });
       cleanup.clear(); unhook(); ctx.setTools();
+      try { speechSynthesis.cancel(); } catch (ignored) {}
       commit ? C.commit() : C.discard();
       return true;
     }
@@ -649,24 +677,43 @@
 
   /* ---------- Menú principal ---------- */
   const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const menuState = { players: 0, minutes: 0, style: '', q: '', group: 'all' };
   const gcard = (g) => h('a', { class: 'gcard', href: '#/j/' + g.id, style: '--c:' + g.color },
     h('span', { class: 'gemoji' }, g.emoji), h('strong', null, g.name), h('span', { class: 'gtag' }, g.tag),
     h('span', { class: 'gnum' }, g.badge || '👥 ' + g.min + '–' + (g.max || 20)),
     h('span', { class: 'gmeta' }, '≈ ' + C.catalog[g.id][1] + ' min · ' + C.styles[C.catalog[g.id][0]]));
   function menu() {
-    let q = '', grp = 'all';
-    const filters = Object.assign({ players: 0, minutes: 0, style: '' }, store.get('menu', {}));
+    let q = menuState.q, grp = menuState.group;
+    const filters = menuState, controls = [];
     const list = h('div'), chips = h('div', { class: 'chips scroll' });
+    const count = h('p', { class: 'result-count', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' });
     const games = C.games.filter((g) => !g.hidden), byId = (ids) => ids.map((id) => games.find((g) => g.id === id)).filter(Boolean);
-    const matches = (g) => C.matches(g, filters) && (grp === 'all' || g.group === grp) && (!q || norm(g.name + ' ' + g.tag).includes(norm(q)));
+    const matches = (g) => C.matches(g, filters) && (grp === 'all' || g.group === grp) && (!q.trim() || norm(g.name + ' ' + g.tag).includes(norm(q.trim())));
     const random = btn('🎲 Al azar', () => { const eligible = games.filter(matches); if (eligible.length) location.hash = '#/j/' + pick(eligible).id; }, 'small');
-    const select = (label, key, options) => h('label', { class: 'filter' }, h('span', null, label), h('select', {
-      'aria-label': label, onchange: (e) => { filters[key] = key === 'style' ? e.target.value : Number(e.target.value); store.set('menu', filters); draw(); },
-    }, options.map(([value, text]) => h('option', { value, selected: filters[key] === value }, text))));
+    const query = h('input', { type: 'search', class: 'search', value: q, placeholder: 'Buscar juego…', 'aria-label': 'Buscar juego', oninput: (e) => { q = menuState.q = e.target.value; draw(); } });
+    function reset() {
+      Object.assign(menuState, { players: 0, minutes: 0, style: '', q: '', group: 'all' });
+      q = ''; grp = 'all'; query.value = '';
+      controls.forEach(([key, el]) => (el.value = String(filters[key])));
+      draw(); query.focus({ preventScroll: true });
+    }
+    const clear = btn('Limpiar búsqueda y filtros', reset, 'small');
+    const select = (label, key, options) => {
+      const el = h('select', {
+        'aria-label': label, onchange: (e) => { filters[key] = key === 'style' ? e.target.value : Number(e.target.value); draw(); },
+      }, options.map(([value, text]) => h('option', { value, selected: filters[key] === value }, text)));
+      controls.push([key, el]);
+      return h('label', { class: 'filter' }, h('span', null, label), el);
+    };
+    const groups = [['all', 'Todos']].concat(C.groups).map(([id, label]) => [id,
+      h('button', { type: 'button', class: 'chip', onclick: () => { grp = menuState.group = id; draw(); } }, label)]);
+    chips.append(...groups.map(([, node]) => node));
     function draw() {
-      chips.replaceChildren(...[['all', 'Todos']].concat(C.groups).map(([id, l]) =>
-        h('button', { type: 'button', class: 'chip' + (grp === id ? ' on' : ''), 'aria-pressed': String(grp === id), onclick: () => { grp = id; draw(); } }, l)));
-      random.disabled = !games.some(matches);
+      groups.forEach(([id, node]) => { node.classList.toggle('on', grp === id); node.setAttribute('aria-pressed', String(grp === id)); });
+      const found = games.filter(matches).length;
+      random.disabled = !found;
+      count.textContent = found + (found === 1 ? ' juego disponible' : ' juegos disponibles');
+      clear.hidden = !q && grp === 'all' && !filters.players && !filters.minutes && !filters.style;
       const out = [];
       const section = (label, gs) => gs.length && out.push(h('h2', { class: 'gtitle' }, label), h('div', { class: 'grid' }, gs.map(gcard)));
       if (!q && grp === 'all') {
@@ -676,7 +723,8 @@
       C.groups.forEach(([id, label]) => {
         if (grp === 'all' || grp === id) section(label, games.filter((g) => g.group === id && matches(g)));
       });
-      list.replaceChildren(...(out.length ? out : [h('p', { class: 'muted center' }, 'Ningún juego coincide con la búsqueda.')]));
+      list.replaceChildren(...(out.length ? out : [h('div', { class: 'card empty-results center' }, h('div', { class: 'big-emoji', 'aria-hidden': 'true' }, '🔎'),
+        h('h2', null, 'Ningún juego coincide'), h('p', { class: 'muted' }, 'Prueba otra búsqueda o limpia los filtros para volver a elegir.'), btn('Mostrar todos los juegos', reset, 'primary'))]));
     }
     const snd = h('button', { type: 'button', class: 'icon', 'aria-label': 'Sonido', onclick: () => { C.sound.on = !C.sound.on; store.set('sound', C.sound.on); snd.textContent = C.sound.on ? '🔊' : '🔇'; } }, C.sound.on ? '🔊' : '🔇');
     draw();
@@ -684,17 +732,17 @@
     mount(h('div', { class: 'menu' },
       h('header', { class: 'wrap brand' }, h('div', null, h('h1', null, C.NAME), h('p', { class: 'muted' }, games.length + ' juegos para un solo móvil y mucha gente alrededor.')), snd),
       h('main', { class: 'wrap' },
-        h('a', { class: 'banner', href: '#/j/fiesta' }, h('span', { class: 'gemoji' }, '🎉'), h('span', null, h('strong', null, 'Modo fiesta'), h('br'), 'Una ronda de cada juego, sin volver al menú.')),
+        h('a', { class: 'banner', href: '#/j/fiesta' }, h('span', { class: 'gemoji' }, '🎉'), h('span', null, h('strong', null, 'Modo fiesta'), h('br'), 'Mezcla los 26 juegos sin volver al menú.')),
         h('div', { class: 'tools' },
           random,
           h('a', { class: 'btn small', href: '#/marcador' }, '🏆 Marcador'), h('a', { class: 'btn small', href: '#/castigos' }, '😈 Castigos')),
-        h('input', { type: 'search', class: 'search', placeholder: 'Buscar juego…', 'aria-label': 'Buscar juego', oninput: (e) => { q = e.target.value; draw(); } }),
-        h('details', { class: 'card menu-filters' }, h('summary', null, 'Encontrar juego para el grupo'),
+        query,
+        h('details', { class: 'card menu-filters', open: !!(filters.players || filters.minutes || filters.style) }, h('summary', null, 'Encontrar juego para el grupo'),
           select('Jugadores', 'players', [[0, 'Cualquier grupo']].concat(Array.from({ length: 20 }, (_, i) => [i + 1, String(i + 1)]))),
           select('Duración aproximada', 'minutes', [[0, 'Cualquier duración'], [5, 'Hasta 5 min'], [15, 'Hasta 15 min'], [30, 'Hasta 30 min']]),
           select('Estilo', 'style', [['', 'Cualquier estilo']].concat(Object.entries(C.styles))),
           h('p', { class: 'muted small' }, 'Tiempos orientativos para una partida breve con cuatro personas. Al azar también respeta estos filtros.')),
-        chips, list,
+        chips, h('div', { class: 'results-head' }, count, clear), list,
         h('div', { class: 'muted small center foot' }, offlinePanel(), 'Cada juego guarda sus propios jugadores y ajustes en este dispositivo.',
           h('a', { href: '#/datos' }, 'Copias de seguridad'), h('a', { href: '#/creditos' }, 'Créditos de las fotos')))));
   }
@@ -785,6 +833,7 @@
   const refreshOffline = () => paintOffline(document.getElementById('offline-status'));
   window.addEventListener('hashchange', route);
   window.addEventListener('DOMContentLoaded', () => {
+    try { localStorage.removeItem('corrillo:menu'); } catch (ignored) { /* Los filtros son temporales. */ }
     C.loadCustom();
     route();
   });
