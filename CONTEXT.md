@@ -1,6 +1,6 @@
 # Corrillo — contexto del proyecto
 
-Documento de traspaso para continuar el desarrollo desde Claude Code (u otro asistente) sin el historial de la conversación original. Fecha: 13 de noviembre de 2026.
+Documento de traspaso para continuar el desarrollo desde Claude Code (u otro asistente) sin el historial de la conversación original. Última actualización: 13 de noviembre de 2026.
 
 ## 1. Qué es
 
@@ -8,7 +8,8 @@ Documento de traspaso para continuar el desarrollo desde Claude Code (u otro asi
 
 - **Propietario:** Sergio. Carpeta del proyecto: `E:\sergio\Programacion\corrillo` (Windows).
 - **Público objetivo:** estudiantes universitarios españoles. Todo el texto está en español de España.
-- **Estado:** 26 juegos, modo fiesta y funciones generales terminados y probados en navegador de escritorio con tamaño de móvil. **Nunca se ha probado en un teléfono real.**
+- **Estado:** 26 juegos, Modo fiesta y funciones generales terminados. Probados en navegador con tamaño de móvil (prueba de humo) y por Sergio en su móvil real a través de la web publicada, sin problemas detectados.
+- **Uso:** personal y no comercial, como alternativa propia a las apps de pago de este estilo.
 - **Publicada:** repositorio público https://github.com/R4INYIS/corrillo (cuenta personal, no la de la empresa) y web en GitHub Pages: https://r4inyis.github.io/corrillo/ (HTTPS, se actualiza con cada push a `main`).
 
 ## 2. Decisiones del propietario (no cambiarlas sin preguntar)
@@ -18,7 +19,7 @@ Documento de traspaso para continuar el desarrollo desde Claude Code (u otro asi
 3. **Cada juego gestiona sus propios jugadores y ajustes.** No hay lista global de jugadores. Se guardan por juego en `localStorage`. La única concesión es el botón «Usar los de la última partida».
 4. **Contenido apto para todos por defecto, picante opcional.** Las categorías con `spicy: true` vienen desactivadas y se marcan «🌶️ +18». Lo mismo con la lista de castigos «Beber».
 5. **Enfoque universitario:** casi todos los juegos tienen una categoría «🎓 Universidad» y referencias a internet, TikTok y famosos conocidos en España.
-6. **Barra de estimación «futurista»:** escala logarítmica de 0 a 1T con notación americana (K, M, **B** = mil millones, **T** = billón español), que redondea más cuanto mayor es la cifra.
+6. **Barra de estimación «futurista»:** escala logarítmica de 0 a 1T con notación americana (K, M, **B** = mil millones, **T** = billón español), que redondea más cuanto mayor es la cifra. La puntuación usa diferencia simple, no logarítmica, y los resultados se ven en escala lineal ampliada.
 7. **Fuera de alcance por ahora:** modo online con salas y servidor, y dominio propio (se publica gratis en GitHub Pages).
 
 ## 3. Cómo ejecutarla y probarla
@@ -26,11 +27,13 @@ Documento de traspaso para continuar el desarrollo desde Claude Code (u otro asi
 | Qué | Cómo |
 |---|---|
 | Abrir en el ordenador | Doble clic en `index.html` |
-| Abrir en el móvil (misma wifi) | `servir.bat` (lanza `python -m http.server 8000`) y abrir `http://IP-DEL-PC:8000` en el móvil. **Este script no se ha ejecutado nunca**; comprobar que funciona |
+| Abrir en el móvil | La web publicada: https://r4inyis.github.io/corrillo/ (se puede añadir a la pantalla de inicio) |
+| Probar en el móvil sin publicar (misma wifi) | `servir.bat` (lanza `python -m http.server 8000`) y abrir `http://IP-DEL-PC:8000`. Este script no se ha usado nunca |
+| Publicar cambios | `git push` a `main`; GitHub Pages actualiza la web en uno o dos minutos. Antes, subir `VERSION` en `sw.js` para que los móviles descarguen la versión nueva |
 | Comprobar sintaxis | `node --check` sobre cada archivo de `js/` |
-| Prueba de humo | `python tests/smoke.py` (necesita `pip install playwright` y Chrome). Juega cada juego con ajustes al azar pulsando botones al azar y falla si hay errores de JavaScript. Tarda 10–15 minutos |
+| Prueba de humo | `python tests/smoke.py [id …]` (necesita `pip install playwright` y Chrome). Juega cada juego (o solo los indicados) con ajustes al azar pulsando botones al azar y falla si hay errores de JavaScript. Todos tardan 10–15 minutos |
 
-El service worker (`sw.js`) solo se registra bajo `http(s)`, no en `file://`. Usa estrategia «red primero, caché si no hay conexión». **Al añadir o quitar archivos hay que actualizar la lista `FILES` y subir `VERSION`** (ahora `corrillo-v5`). La instalación como app y el uso sin conexión no se han probado.
+El service worker (`sw.js`) solo se registra bajo `http(s)`, no en `file://`. Usa estrategia «red primero, caché si no hay conexión». **Al añadir o quitar archivos hay que actualizar la lista `FILES` y subir `VERSION`** (ahora `corrillo-v6`). La instalación como app y el uso sin conexión no se han comprobado de forma expresa.
 
 ## 4. Estructura de archivos
 
@@ -95,19 +98,29 @@ C.register({
 | `ctx.alive` | `false` cuando la partida se ha cerrado; comprobar en callbacks diferidos |
 | `ctx.turn()` | Llamar al empezar cada tarjeta o turno. Devuelve `true` si el Modo fiesta cambia de juego: en ese caso, `return` |
 | `ctx.finish(nombres, puntos, unidad, porEquipos)` | Devuelve la pantalla de clasificación final: suma victoria al marcador de la noche, castiga al último y añade «Compartir» |
-| `ctx.endBar(etiqueta)` | Botones de fin: otra partida / ajustes / menú (en fiesta: siguiente juego) |
+| `ctx.endBar(etiqueta)` | Botones de fin: otra partida / ajustes / menú (en fiesta: siguiente juego). Además marca como jugada la carta pendiente |
 | `ctx.again()`, `ctx.setup()`, `ctx.menu()` | Navegación |
 
 ### Utilidades compartidas
 - **DOM:** `C.h(tag, attrs, ...hijos)` y `C.btn(texto, fn, clases)`. Los textos de usuario se insertan siempre como nodos de texto, nunca como HTML.
-- **Azar y contenido:** `C.rnd`, `C.pick`, `C.shuffle`, `C.pool(banco, cats)`, `C.draw(clave, pool)` (saca un elemento sin repetir hasta agotar el mazo; persiste en `localStorage`).
+- **Azar y contenido:** `C.rnd`, `C.pick`, `C.shuffle`, `C.pool(banco, cats)`.
+- **Mazos sin repetir:** `C.draw(clave, pool, {keep})` saca una carta no jugada en este dispositivo ni salida en esta sesión. Queda *pendiente* y solo se guarda como jugada (`used:<clave>`) cuando termina su ronda: con `C.commit()`, al sacar la siguiente carta o al llegar a `endBar`. `C.skip(clave)` la descarta sin guardarla; salir a mitad de ronda la olvida (`C.discard()` en `stop`). `keep: false` = nunca se guarda entre sesiones. Al agotarse el mazo se baraja de nuevo. `C.unplayed(clave, pool)` y `C.forget(clave)` para consultas y reinicios.
+
+| Juego | No repetir entre sesiones | Botón «Saltar» |
+|---|---|---|
+| A ojo, Precio justo, Subasta | sí | «Ya la conocemos: otra pregunta» antes de estimar/apostar |
+| ¿Verdad o invento? | sí | «Ya me la sé: otra» antes de responder |
+| Apuesto a que… | sí | «Cambiar de reto» antes de apostar |
+| En la misma onda | **no** (una escala admite otras pistas) | «Otra escala», solo en la pantalla secreta de quien da la pista |
+| Impostor, ¿Quién miente?, Espía, Impostor de cifras, Contraseña | sí | no (la carta es secreta: saltar delataría) |
+| Tarjetas de fiesta (Yo nunca, Probable, Prefieres, Es un 10, Detallazo, Verdad o Reto, Rompehielos), Bomba, 5 segundos, Charadas, Prohibidas, ¿Quién lo dijo?, Conocemos | sí | no (forma parte del juego o ya hay «Siguiente») |
 - **Reparto privado:** `C.pass(ctx, nombres, carta(nombre, i, avanzar), alTerminar, opciones)`. La carta puede devolver un nodo o `{ node, before() → error, noBtn }`.
 - **Otros componentes:** `C.secret` (carta de papel), `C.clock` (cuenta atrás), `C.pickGrid` (elegir jugador), `C.scores`, `C.confirm`.
-- **Cifras:** `C.dial({unit})` barra logarítmica 0–1T; `C.dial({min, max})` barra lineal de enteros (años). `C.big(n)` → «2,7B»; `C.bigWords(n)` → «2,7 mil millones»; `C.plot(puntos, respuesta, lineal?)` dibuja las estimaciones sobre la barra.
+- **Cifras:** `C.dial({unit})` barra logarítmica 0–1T; `C.dial({min, max})` barra lineal de enteros (años). `C.big(n)` → «2,7B»; `C.bigWords(n)` → «2,7 mil millones»; `C.plot(puntos, respuesta, lineal?, zoom?)` dibuja las estimaciones sobre la barra; con `zoom = {min, max, fmt}` se amplía a escala lineal tras un segundo.
 - **Funciones generales:** `C.penalty(nombre)` (tarjeta de castigo o `null`), `C.shareBtn(titulo, lineas, color)` (imagen en canvas → Web Share o descarga), `C.say(texto)` (voz del navegador), `C.sound` (pitidos con WebAudio), `C.buzz` (vibración), `C.sub` y `C.canPlay` (Modo fiesta).
 
 ### Claves de `localStorage` (prefijo `corrillo:`)
-`cfg:<id>` (jugadores, ajustes y categorías conocidas de cada juego) · `used:<clave>` (cartas ya salidas) · `custom:<id>` (contenido propio) · `last` (últimos jugadores) · `fav` · `recent` · `night` (marcador) · `pen` (castigos) · `sound`.
+`cfg:<id>` (jugadores, ajustes y categorías conocidas de cada juego) · `used:<clave>` (cartas ya jugadas, ver «Mazos sin repetir») · `custom:<id>` (contenido propio) · `last` (últimos jugadores) · `fav` · `recent` · `night` (marcador) · `pen` (castigos) · `sound`.
 
 Las categorías nuevas no picantes se activan solas en configuraciones ya guardadas gracias a la lista `known` de `cfg:<id>`.
 
@@ -149,43 +162,44 @@ Además, `fiesta` (**Modo fiesta**, `fiesta.js`) está registrado como juego ocu
 ### Reglas que no son obvias leyendo el menú
 - **Impostor:** modo clásico (el impostor no ve palabra; pista opcional; si lo pillan puede salvarse adivinándola) y modo «palabra parecida» (usa `impostorPares`; el impostor no sabe que lo es; ignora las categorías).
 - **Hombres Lobo:** sin narrador. Cada noche el móvil pasa por todos los vivos y todos tocan un nombre para no delatar su papel. Papeles opcionales: vidente, protector, bruja, cazador, cupido. La bruja usa la poción de vida a ciegas (no ve a quién atacan). Las muertes en cadena (enamorados, disparo del cazador) las resuelve la función `die()`.
-- **A ojo / Precio justo / Subasta:** en la escala logarítmica gana quien acierta mejor el **orden de magnitud** (distancia en log10), no la diferencia absoluta. Las preguntas de años usan barra lineal y diferencia directa.
+- **A ojo / Precio justo / Impostor de cifras:** se estima en la barra logarítmica, pero **gana quien tenga la menor diferencia simple** |estimación − respuesta| (decisión de Sergio, noviembre de 2026). En la pantalla de resultados la barra se amplía con animación a **escala lineal** entre la cifra más baja y la más alta, y cada jugador ve a qué distancia se quedó.
 - **Subasta de cifras:** se sube la apuesta («son al menos X») o se desafía al anterior. Si la cifra real ≥ apuesta, gana quien apostó.
-- **En la misma onda:** cooperativo, con una rueda semicircular (SVG) y aguja arrastrable. Franja estrecha: distancia al centro ≤3 → 4 puntos, ≤9 → 3, ≤15 → 2, más → 0. Las escalas deben ser subjetivas y dar debate (nada de «seco ↔ mojado»).
+- **En la misma onda:** cooperativo, con una rueda semicircular (SVG) y aguja arrastrable. Franja estrecha: distancia al centro ≤3 → 4 puntos, ≤9 → 3, ≤15 → 2, más → 0. Cada escala es **un solo eje** con dos extremos opuestos de la misma cualidad («Barato ↔ Caro», «Mal regalo ↔ Buen regalo»), subjetiva para que haya debate. No mezclar dos ideas distintas en una escala (se quitó «Placer culpable ↔ Orgullo total») ni usar escalas puramente físicas. Las escalas pueden repetirse entre partidas y quien da la pista puede pedir «otra escala».
 - **¿Cuánto nos conocemos?:** preguntas de dos opciones; el protagonista puntúa si acierta al menos la mitad.
 - **Charadas:** ajuste opcional para marcar inclinando el móvil (`deviceorientation`, eje beta).
 - **Votaciones:** en Impostor, Espía y Lobos se vota a mano alzada y se toca al más votado. Solo «¿Quién es más probable…?» tiene voto secreto en el móvil.
 
 ## 7. Contenido
 
-Unas 2.700 tarjetas en total tras la tercera tanda (`ampliacion.js`). Las cifras de la tabla son de antes de esa ampliación; para contarlas, en la consola: recorrer `Corrillo.content`. Elementos por banco de `C.content`:
+Unas 2.670 tarjetas en total (recuento de noviembre de 2026). Elementos por banco de `C.content`:
 
 | Banco | N.º | Formato de cada elemento |
 |---|---|---|
-| impostor | 257 | `'palabra|pista'` |
+| impostor | 393 | `'palabra|pista'` (la pista orienta al impostor sin regalar la palabra) |
 | impostorPares | 48 | `'palabra A|palabra B'` |
-| mentiroso | 72 | `'pregunta normal|pregunta distinta'` |
-| espia | 88 | `'lugar'` |
-| cifras | 43 parejas | `[pregA, respA, unidadA, pregB, respB, unidadB, min, max]` |
-| estimaciones | 30 | `[pregunta, respuesta, unidad, min, max]` |
-| precios | 28 | `[título, precio, unidad, 0, 0, emoji, detalle, rutaFoto?]` |
-| verdadreto | 64 + 54 | `{ verdad: {cat: [...]}, reto: {cat: [...]} }`; `{j}` = otro jugador |
-| probable | 74 | frase sin el encabezado «¿Quién es más probable que…» |
-| rompehielos | 76 | pregunta |
-| prefieres | 64 | `'opción A|opción B'` |
-| diez | 68 | la pega, sin «Es un 10, pero…» |
-| detallazo | 62 | situación |
-| invento | 64 | `'V o F|afirmación|explicación'` |
-| apuesto | 62 | `'reto|segundos'` (0 = sin cuenta atrás) |
-| bomba | 106 | categoría |
-| charadas | 200 | palabra (también lo usa Contraseña) |
-| prohibidas | 70 | `'PALABRA|vetada1,vetada2,…'` |
-| yonunca | 64 | frase sin «Yo nunca» |
-| cinco | 60 | consigna sin «Di tres» |
-| quienlodijo | 46 | pregunta |
-| conocemos | 48 | `'pregunta con {n}|opción A|opción B'` |
-| onda | 50 | `'extremo izquierdo|extremo derecho'` |
-| castigos | 34 | `{ suaves, retos, beber }` |
+| mentiroso | 104 | `'pregunta normal|pregunta distinta'` (respuestas que puedan parecerse) |
+| espia | 152 | `'lugar'` |
+| cifras | 48 parejas | `[pregA, respA, unidadA, pregB, respB, unidadB, min, max]` (min y max solo para años) |
+| estimaciones | 34 | `[pregunta, respuesta, unidad, min, max]` |
+| precios | 70 | `[título, precio, unidad, 0, 0, emoji, detalle, rutaFoto?]` |
+| verdadreto | 94 + 80 | `{ verdad: {cat: [...]}, reto: {cat: [...]} }`; `{j}` = otro jugador |
+| probable | 125 | frase sin el encabezado «¿Quién es más probable que…» |
+| rompehielos | 102 | pregunta |
+| prefieres | 96 | `'opción A|opción B'` |
+| diez | 96 | la pega, sin «Es un 10, pero…» |
+| detallazo | 88 | situación |
+| invento | 94 | `'V o F|afirmación|explicación'` |
+| apuesto | 80 | `'reto|segundos'` (0 = sin cuenta atrás) |
+| bomba | 147 | categoría |
+| charadas | 270 | palabra (también la usa Contraseña, salvo la categoría de películas) |
+| prohibidas | 94 | `'PALABRA|vetada1,vetada2,…'` |
+| yonunca | 102 | frase sin «Yo nunca» |
+| cinco | 97 | consigna sin «Di tres» |
+| quienlodijo | 66 | pregunta |
+| conocemos | 68 | `'pregunta con {n}|opción A|opción B'` |
+| onda | 72 | `'extremo izquierdo|extremo derecho'` |
+| castigos | 50 | `{ suaves, retos, beber }` |
+| creditos | 67 | `[ruta, qué es, autor, licencia, url]` (no es un banco de juego) |
 
 Todos los bancos (salvo `impostorPares`, `verdadreto` y los numéricos) son objetos `{ categoría: [elementos] }`.
 
@@ -195,36 +209,33 @@ Todos los bancos (salvo `impostorPares`, `verdadreto` y los numéricos) son obje
 - Categorías añadidas en la tercera tanda: Impostor «🎬 Películas y series» y «🌍 Países y ciudades»; ¿Quién miente? «🔢 Con números»; El Espía «🇪🇸 Muy de España»; Charadas «🎬 Películas y series»; Precio justo «🏛️ Historia y ciencia»; «🎉 De fiesta» en Probable, ¿Qué prefieres?, Yo nunca, 5 segundos y La Bomba.
 
 ### Criterios de contenido
-- **Datos reales:** las afirmaciones de «¿Verdad o invento?», las cifras y los precios se eligieron por ser hechos estables y conocidos. Al añadir más, verificarlos; evitar datos discutidos o que cambien cada año.
-- **Cifras que caducan:** usuarios de YouTube (2.700 M), Instagram y WhatsApp (3.000 M), habitantes (España 49 M, mundo 8.200 M). Son aproximadas a 2026.
+- **Datos reales:** las afirmaciones de «¿Verdad o invento?», las cifras y los precios se eligieron por ser hechos estables y comprobables. Al añadir más, verificarlos; evitar datos discutidos o que cambien cada año.
+- **Nivel de A ojo y cifras:** medio-alto. La gente debe saber más o menos por dónde va, pero no la cifra exacta. Nada de «¿cuántas horas tiene un día?», semanas del año, casillas del ajedrez, etc.
+- **¿Verdad o invento?:** se quitaron los mitos que ya conoce todo el mundo (10 % del cerebro, memoria del pez, cascos vikingos…); priorizar datos poco conocidos.
+- **Cifras que caducan:** usuarios de YouTube (2.700 M), Instagram y WhatsApp (3.000 M), habitantes (España 49 M, mundo 8.200 M), artículos de la Wikipedia en inglés (7 M). Son aproximadas a 2026.
 - **Famosos:** solo como palabras de juego, con pistas neutras («Streamer», «Fútbol»). No atribuirles frases ni hechos inventados.
 - **Tono:** humor de estudiante, sin estereotipos ofensivos.
 
 ## 8. Pendiente y sin verificar
 
-### Fotos de «Precio justo» (hecho)
-67 de los 70 artículos tienen foto de Wikimedia Commons (dominio público, CC0 o CC BY/BY-SA), redimensionada a 640×400 como máximo en `img/precios/` (2,4 MB en total). Sin foto, con su emoji: «Facebook compra WhatsApp», «Fichaje de Coutinho» y «Rodar Paranormal Activity». Criterio: **sin retratos de personas reales ni logotipos protagonistas**; para fichajes y compras, imágenes genéricas (estadio, objeto relacionado). La atribución que exigen las licencias está en `js/content/creditos.js` y se muestra en `#/creditos`. Para añadir una foto: guardarla en `img/precios/`, ponerla como octavo elemento del artículo, añadir su crédito en `creditos.js` y su ruta a `FILES` en `sw.js`.
-Uso personal y no comercial, como alternativa propia a las apps de pago de este estilo.
+### Fotos de «Precio justo»
+67 de los 70 artículos tienen foto de Wikimedia Commons (dominio público, CC0 o CC BY/BY-SA), redimensionada a 640×400 como máximo en `img/precios/` (2,4 MB en total). Sin foto, con su emoji: «Facebook compra WhatsApp», «Fichaje de Coutinho» y «Rodar Paranormal Activity». Criterio: **sin retratos de personas reales ni logotipos protagonistas**; para fichajes y compras, imágenes genéricas (estadio, objeto relacionado). La atribución que exigen las licencias está en `js/content/creditos.js` y se muestra en `#/creditos`. Para añadir una foto: guardarla en `img/precios/`, ponerla como octavo elemento del artículo, añadir su crédito en `creditos.js` y su ruta a `FILES` en `sw.js`. Al descargar de Commons, pedir miniaturas de tamaño estándar (p. ej. 500 px): los tamaños no estándar devuelven error 429.
 
-### Sin probar en un dispositivo real
-- Todo en un teléfono: tamaños, teclado en pantalla, zonas seguras del iPhone.
-- Selector de dedos multitáctil (Al azar).
-- Inclinación en Charadas. En iPhone exige HTTPS y permiso; el sentido del eje puede necesitar ajuste.
-- Narración por voz (Hombres Lobo), sonido y vibración.
-- Compartir resultado como imagen (Web Share con archivos).
-- Service worker, instalación como app y uso sin conexión.
-- `servir.bat`.
+### Sin verificar de forma expresa
+Sergio lo ha probado en su móvil sin detectar problemas, pero no se ha comprobado una por una cada función: selector de dedos multitáctil (Al azar), inclinación en Charadas (en iPhone exige permiso; el sentido del eje puede necesitar ajuste), voz de Hombres Lobo, vibración, compartir resultado como imagen, instalación como app y uso sin conexión, y `servir.bat`.
 
 ### Limitaciones conocidas
 - El marcador de la noche identifica a los jugadores por nombre exacto («Ana» ≠ «ana»).
 - «Verdad o Reto» no admite contenido propio (su banco tiene dos niveles).
 - En Modo fiesta cada juego usa las categorías guardadas en su propia pantalla; no hay ajuste global de picante.
-- Bancos más cortos: `estimaciones` (34), `castigos` (50), `cifras` (48 parejas), `quienlodijo` (66).
+- Bancos más cortos: `estimaciones` (34), `cifras` (48 parejas), `castigos` (50), `quienlodijo` (66).
+- `CONTEXT.md` es público en el repositorio (incluye el nombre de pila del propietario y la ruta local).
 
 ### Ideas propuestas y no hechas
+- **Calidad:** un comprobador de formato del contenido en `tests/` (dilemas sin `|`, «V/F» mal puestos, `{n}` ausente, duplicados).
+- **Ajustes:** interruptor global de picante en el Modo fiesta; marcador que no distinga mayúsculas ni espacios; contenido propio en Verdad o Reto; ver y reiniciar desde la configuración cuántas preguntas quedan sin jugar (`C.unplayed`, `C.forget`).
 - **Estética:** tema oscuro, animaciones (giro de carta, confeti, temblor de la bomba), ilustraciones propias en lugar de emojis, sonidos con más carácter, avatares de color por jugador.
-- **Juegos de Splash sin replicar:** Solo respuestas incorrectas, Kiss Marry Kill, y otros cuyas reglas no son públicas (Word Rush, Guess What?, Score, Buzzer Imposter, $20 Draft). Sketch It y Meme Master requieren modo online.
-- **Otras:** dibujar a ciegas, más papeles en Hombres Lobo, publicar con dominio propio, modo online con salas.
+- **Juegos nuevos (reglas genéricas, nombre y textos propios):** «Solo respuestas incorrectas», «Dibujo a ciegas», «Cita, boda o huida» (picante), más papeles en Hombres Lobo. Otros de Splash tienen reglas no públicas o requieren modo online.
 
 ## 9. Convenciones de código
 
@@ -232,12 +243,14 @@ Uso personal y no comercial, como alternativa propia a las apps de pago de este 
 - Estilo compacto, comentarios en español, sin dependencias externas.
 - El contenido va en `js/content/`, nunca incrustado en la lógica.
 - Los estilos usan variables CSS (`--ink`, `--bg`, `--c` para el color del juego) y un lenguaje visual de borde grueso con sombra dura. El dial de estimación es la excepción deliberada (panel oscuro con neón).
-- Tras cualquier cambio: `node --check` en los archivos tocados, `python tests/smoke.py`, y subir `VERSION` en `sw.js`.
+- Tras cualquier cambio: `node --check` en los archivos tocados, `python tests/smoke.py` (al menos con los juegos tocados), subir `VERSION` en `sw.js`, commit y `git push` a `main` para actualizar la web.
+- Git: repositorio en la cuenta personal **R4INYIS**, nunca en la organización de la empresa.
 
 ## 10. Historial resumido
 
 1. Versión inicial: 18 juegos a partir de una especificación basada en Splash.
 2. Contenido universitario en todos los juegos y categorías «Internet» y «Famosos» en Impostor.
-3. Nueva barra logarítmica de estimación para A ojo e Impostor de cifras.
+3. Nueva barra logarítmica de estimación para A ojo e Impostor de cifras (hoy solo para estimar; la puntuación es por diferencia simple).
 4. Ocho juegos nuevos, Modo fiesta, castigos, contenido propio, favoritos, marcador de la noche, compartir resultado, y mejoras en Impostor, Hombres Lobo, Charadas y A ojo.
-5. Noviembre de 2026 (Claude Code): fotos de Precio justo y página de créditos; Precio justo pasa de 28 a 70 artículos; En la misma onda con rueda semicircular y escalas nuevas; A ojo e Impostor de cifras con preguntas de nivel medio-alto; revisión de todo el contenido y ampliación (`ampliacion.js`) con categorías nuevas.
+5. Noviembre de 2026 (Claude Code): fotos de Precio justo y página de créditos; Precio justo pasa de 28 a 70 artículos; En la misma onda con rueda semicircular; A ojo e Impostor de cifras con preguntas de nivel medio-alto; revisión de todo el contenido y ampliación (`ampliacion.js`) con categorías nuevas.
+6. Noviembre de 2026: git y publicación (repositorio público R4INYIS/corrillo + GitHub Pages); prueba en móvil real; escalas de En la misma onda reescritas con un solo eje; mazos que solo guardan una carta como jugada al terminar su ronda, con botón «Saltar» en los juegos donde tiene sentido; A ojo, Precio justo e Impostor de cifras puntúan por diferencia simple y muestran los resultados en escala lineal ampliada con la distancia de cada jugador.

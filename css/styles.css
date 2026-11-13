@@ -136,6 +136,7 @@ button { cursor: pointer; }
 .list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; width: 100%; text-align: left; }
 .item { display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--paper); border: 2px solid var(--ink); border-radius: 14px; padding: 10px 14px; }
 .item b { font-size: 1.15rem; white-space: nowrap; }
+.item b .dist { display: block; text-align: right; font-size: 0.78rem; font-weight: 700; opacity: 0.7; }
 .item.hit { background: #c9f5e4; }
 .item.miss { background: #ffd9d3; }
 .opt { display: block; width: 100%; background: var(--paper); border: var(--line); border-radius: var(--r); box-shadow: var(--drop); padding: 26px 18px; font-size: 1.3rem; font-weight: 800; text-align: center; text-wrap: balance; position: relative; }
@@ -247,4 +248,8 @@ textarea.textin { resize: vertical; font: inherit; line-height: 1.4; }
 .plot-dot span { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); font-size: 0.72rem; font-weight: 800; color: #eaf6ff; white-space: nowrap; }
 .plot-dot.low span { bottom: auto; top: 24px; }
 .plot-ans { position: absolute; top: 22px; width: 4px; height: 52px; margin-left: -2px; background: #3dd6a3; box-shadow: 0 0 14px #3dd6a3; border-radius: 2px; z-index: 1; }
+.plot-dot, .plot-ans { transition: left 1.1s cubic-bezier(.3, .8, .3, 1); }
+.plot-note { margin: 10px 0 0; text-align: center; font-size: 0.78rem; font-weight: 700; color: #9fb4c8; min-height: 1em; }
+.plot.zoomed .plot-note { color: #3dd6a3; }
+@media (prefers-reduced-motion: reduce) { .plot-dot, .plot-ans { transition: none; } }
 .plot-ans b { position: absolute; left: 50%; top: -20px; transform: translateX(-50%); color: #3dd6a3; font-size: 0.9rem; }

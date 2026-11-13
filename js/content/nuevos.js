@@ -33,45 +33,38 @@
   };
 
   /* ---------- En la misma onda: «extremo izquierdo|extremo derecho» ----------
-     Escalas con un punto subjetivo: casi cualquier pista puede caer en varios sitios y eso genera debate.
-     Evitar escalas puramente físicas (seco/mojado) o con respuesta obvia. */
+     Cada escala es UN solo eje con dos extremos opuestos (de «poco» a «mucho» de la misma cualidad).
+     Tiene que ser subjetiva para que haya debate, pero sin mezclar dos ideas distintas. */
   K.onda = {
     uni: [
-      'Carrera de letras|Carrera de ciencias', 'Asignatura de relleno|Asignatura clave', 'Lo aprueba cualquiera|Filtro de la carrera',
-      'Excusa creíble|Excusa que no cuela', 'Se estudia la noche antes|Hay que llevarlo al día', 'Plan de estudiante|Plan de adulto con nómina',
-      'Te lo pagan los padres|Te lo pagas tú', 'Típico de primero|Típico de último curso', 'Útil en la carrera|Útil en la vida real',
-      'Compañero de piso ideal|Compañero de piso insufrible', 'Destino de Erasmus para estudiar|Destino de Erasmus para salir',
-      'Cosa de la biblioteca|Cosa de la cafetería', 'Trabajo en grupo: lo hace uno|Trabajo en grupo: lo hacen todos',
-      'Gasto razonable de estudiante|Capricho que no te puedes permitir', 'Te hace parecer listo|Te hace parecer pringado',
-      'Bien visto por los profesores|Mal visto por los profesores', 'Cena de piso de estudiantes|Cena de restaurante',
-      'Se queda en la uni|Te acompaña toda la vida', 'Postureo en LinkedIn|Habilidad de verdad', 'Motivo para faltar a clase aceptable|Motivo para faltar a clase ridículo',
+      'Asignatura fácil|Asignatura imposible', 'Carrera con poco futuro|Carrera con mucho futuro', 'Excusa que cuela|Excusa que no cuela',
+      'Mal sitio para estudiar|Buen sitio para estudiar', 'Comida de estudiante triste|Comida de estudiante digna', 'Típico de primero|Típico de último curso',
+      'Poco útil en la vida real|Muy útil en la vida real', 'Compañero de piso horrible|Compañero de piso ideal', 'Erasmus tranquilo|Erasmus de fiesta',
+      'Profesor que cae mal|Profesor que cae bien', 'Plan barato|Plan caro', 'Te hace parecer pringado|Te hace parecer guay',
+      'Poco estresante|Muy estresante', 'Trabajo en grupo fácil|Trabajo en grupo de pesadilla', 'Gasto innecesario|Gasto imprescindible',
     ],
     clasico: [
-      'Infravalorado|Sobrevalorado', 'Moda pasajera|Clásico para siempre', 'Necesidad|Capricho', 'Placer culpable|Orgullo total',
-      'Cosa de niños|Cosa de mayores', 'Comida de diario|Comida de celebración', 'Peli para reír|Peli para llorar',
-      'Habilidad inútil|Habilidad imprescindible', 'Mal invento|Gran invento', 'Fácil de dibujar|Imposible de dibujar',
-      'Normal|Rarísimo', 'Para el verano|Para el invierno', 'Héroe|Villano', 'Famoso en España|Famoso en todo el mundo',
-      'Mainstream|Alternativo', 'Arte|No es arte', 'Deporte|No es deporte', 'Saludable|Te quita años de vida',
-      'Antiguo|Moderno', 'Relaja|Estresa', 'Pijo|Cutre', 'Se hace en solitario|Se hace en grupo', 'Perdonable|Imperdonable',
-      'Mejor el original|Mejor la versión', 'Huele de maravilla|Huele fatal', 'Lo hace todo el mundo|No lo admite nadie',
+      'Frío|Caliente', 'Infravalorado|Sobrevalorado', 'Pasado de moda|De moda', 'Barato|Caro', 'Inútil|Imprescindible', 'Aburrido|Divertido',
+      'Para niños|Para adultos', 'Fácil|Difícil', 'Normal|Raro', 'Feo|Bonito', 'Poco famoso|Muy famoso', 'Poco saludable|Muy saludable',
+      'Mal invento|Gran invento', 'Nada de miedo|Mucho miedo', 'Triste|Alegre', 'Relajante|Estresante', 'Cutre|Pijo', 'Antiguo|Moderno',
+      'Mal regalo|Buen regalo', 'Película mala|Peliculón', 'Villano|Héroe', 'Habilidad inútil|Habilidad útil', 'Comida de diario|Comida de celebración',
+      'Mainstream|Alternativo', 'Fácil de dibujar|Difícil de dibujar', 'Huele mal|Huele bien', 'Delito leve|Delito grave', 'Lo hace poca gente|Lo hace todo el mundo',
     ],
     absurdo: [
-      'Sopa|No es sopa', 'Bocadillo|No es un bocadillo', 'Comida|Bebida', 'Fruta|Verdura', 'Mueble|No es un mueble',
-      'Animal que podrías vencer en una pelea|Animal que te destroza', 'Buen nombre para un perro|Nombre que solo sirve para persona',
-      'Idea genial a las 4 de la mañana|Idea genial a las 4 de la tarde', 'Superpoder útil|Superpoder que no sirve para nada',
-      'Sobrevivirías en un apocalipsis zombi|Primero en caer', 'Lo meterías en una cápsula del tiempo|Mejor que se olvide',
-      'Te lo comerías crudo|Solo cocinado', 'Delito leve|Crimen contra la humanidad', 'Personaje de dibujos|Persona real',
-      'Mascota normal|Mascota de villano', 'Talento oculto|Vergüenza ajena', 'Se puede llevar a una boda|Te echan de la boda',
-      'Abuelo|Bebé', 'Ciencia|Magia', 'Lo arreglas con cinta americana|No tiene arreglo',
+      'Animal que podrías vencer en una pelea|Animal que te destroza', 'Mal nombre para un perro|Buen nombre para un perro', 'Superpoder inútil|Superpoder increíble',
+      'Inútil en un apocalipsis zombi|Útil en un apocalipsis zombi', 'Mala idea a las 4 de la mañana|Buena idea a las 4 de la mañana', 'Mal sitio para dormir|Buen sitio para dormir',
+      'Mal tatuaje|Buen tatuaje', 'Mala mascota|Mascota perfecta', 'Mal disfraz|Disfraz perfecto', 'Mal regalo para tu suegra|Regalo perfecto para tu suegra',
+      'Mala canción para una boda|Canción perfecta para una boda', 'Mal nombre para un grupo de música|Nombre perfecto para un grupo de música', 'Comida que da asco|Comida deliciosa',
+      'Mal plan para un domingo|Plan perfecto para un domingo', 'Fácil de arreglar|Imposible de arreglar', 'Cosa de abuelo|Cosa de adolescente',
     ],
     picante: [
-      'Red flag|Green flag', 'Corta el rollo|Sube la temperatura', 'Primera cita perfecta|Primera cita desastrosa',
-      'Para un rollo de una noche|Para casarse', 'Se cuenta en la primera cita|Se lleva a la tumba', 'Sexy|Nada sexy',
-      'Frase para ligar que funciona|Frase para ligar que da pena', 'Se perdona en pareja|Motivo de ruptura',
-      'Ex que se supera rápido|Ex que deja huella', 'Romántico|Cursi', 'Atrevido|Pasado de rosca', 'Se hace sobrio|Solo con copas',
-      'Detalle de pareja bonito|Detalle de pareja tóxico', 'Mensaje para mandar a las 3 de la mañana|Mensaje que no se manda nunca',
+      'Red flag|Green flag', 'Corta el rollo|Sube la temperatura', 'Mala primera cita|Primera cita perfecta', 'Para una noche|Para toda la vida',
+      'Nada sexi|Muy sexi', 'Mala frase para ligar|Frase para ligar infalible', 'Perdonable en pareja|Imperdonable en pareja', 'Ex fácil de olvidar|Ex imposible de olvidar',
+      'Poco romántico|Muy romántico', 'Tímido|Atrevido', 'Mal sitio para un beso|Sitio perfecto para un beso', 'Detalle de pareja tóxico|Detalle de pareja bonito',
+      'Mensaje que nunca mandarías|Mensaje que mandarías sin dudar',
     ],
   };
+
 
   /* ---------- Precio justo: [título, precio, unidad, 0, 0, emoji, detalle, foto opcional] ----------
      Para usar fotos, guarda la imagen en img/precios/ y pon su ruta al final, p. ej. 'img/precios/ps5.jpg'. */

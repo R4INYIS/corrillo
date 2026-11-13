@@ -13,9 +13,9 @@
   const qCard = (it, small) => (it[5]
     ? h('div', { class: 'card q' }, it[7] ? h('img', { class: 'pic', src: it[7], alt: '' }) : h('div', { class: 'pic' }, it[5]), it[0], h('p', { class: 'muted small', style: 'font-weight:500;margin-top:6px' }, it[6]))
     : h('div', { class: 'card q' }, small && h('small', null, small), it[0]));
-  /* Distancia entre una estimación y la respuesta: en escala logarítmica cuenta el orden de magnitud. */
-  const lg = (x) => Math.log10(x + 1);
-  const gap = (it, a) => (isYear(it) ? Math.abs(a - it[1]) : Math.abs(lg(a) - lg(it[1])));
+  /* Distancia entre una estimación y la respuesta: diferencia simple. Gana siempre quien más cerca se queda. */
+  const gap = (it, a) => Math.abs(a - it[1]);
+  const fmtN = (it) => (isYear(it) ? String : C.big);
 
   function collect(ctx, P, qFor, done) {
     const ans = [];
@@ -25,7 +25,15 @@
         before: () => (inp.value() == null ? 'Desliza la barra para marcar tu cifra.' : void (ans[i] = inp.value())) };
     }, () => done(ans), { verb: 'Ver mi pregunta' });
   }
-  const plot = (it, P, ans) => C.plot(P.map((p, i) => [p, ans[i]]), it[1], isYear(it) ? { min: it[3], max: it[4] } : null);
+  /* Al final se amplía la barra a escala lineal entre la cifra más baja y la más alta (con margen) para ver las distancias reales. */
+  function zoomOf(it, ans) {
+    const vals = ans.concat(it[1]);
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    const pad = (hi - lo) * 0.08 || Math.max(1, hi * 0.1);
+    lo = isYear(it) ? Math.floor(lo - pad) : Math.max(0, lo - pad); hi = isYear(it) ? Math.ceil(hi + pad) : hi + pad;
+    return { min: lo, max: hi, fmt: fmtN(it) };
+  }
+  const plot = (it, P, ans) => C.plot(P.map((p, i) => [p, ans[i]]), it[1], isYear(it) ? { min: it[3], max: it[4] } : null, zoomOf(it, ans));
 
   C.register({
     id: 'cifras', name: 'Impostor de cifras', emoji: '🔢', color: '#3dd6a3', group: 'deduccion', min: 3,
@@ -69,14 +77,16 @@
       round++;
       const it = C.draw(key, items);
       ctx.show(h('div', { class: 'center' }, h('p', { class: 'pill' }, 'Ronda ' + round + ' de ' + s.rounds), qCard(it),
-        btn('Empezar a estimar', () => collect(ctx, P, () => it, result), 'primary big')));
+        btn('Empezar a estimar', () => collect(ctx, P, () => it, result), 'primary big'),
+        btn('⏭️ Ya la conocemos: otra pregunta', () => { C.skip(key); round--; next(); }, 'small')));
       function result(ans) {
+        C.commit();
         const diff = ans.map((a) => gap(it, a)), best = Math.min(...diff), worst = Math.max(...diff);
         diff.forEach((d, i) => { if (d === best) pts[i]++; });
         const order = P.map((_, i) => i).sort((a, b) => diff[a] - diff[b]);
         const last = round >= s.rounds;
         ctx.show(h('div', { class: 'center' }, h('div', { class: 'card q' }, h('small', null, it[0]), sol(it[1], it[2])), plot(it, P, ans),
-          h('div', { class: 'list' }, order.map((i) => h('div', { class: 'item' + (diff[i] === best ? ' hit' : '') }, h('span', null, (diff[i] === best ? '🎯 ' : '') + P[i]), h('b', null, C.big(ans[i]))))),
+          h('div', { class: 'list' }, order.map((i) => h('div', { class: 'item' + (diff[i] === best ? ' hit' : '') }, h('span', null, (diff[i] === best ? '🎯 ' : '') + P[i]), h('b', null, fmtN(it)(ans[i]) + (it[2] && !isYear(it) ? ' ' + it[2] : ''), h('small', { class: 'dist' }, diff[i] ? (ans[i] > it[1] ? '+' : '−') + fmtN(it)(diff[i]) : '¡exacto!'))))),
           !last && worst !== best && C.penalty(P[order[order.length - 1]]),
           last ? ctx.finish(P, pts, ' pts') : btn('Siguiente ronda', next, 'primary big')));
       }
@@ -135,6 +145,7 @@
           ctx.show(h('div', { class: 'center' }, h('p', { class: 'pill' }, 'Ronda ' + round + ' de ' + s.rounds), qCard(it),
             bid == null ? h('p', { class: 'lead' }, 'Abre la subasta ' + P[cur] + '.') : h('div', { class: 'card pen' }, h('small', null, 'Apuesta de ' + P[bidder]), 'Al menos ' + sol(bid, it[2])),
             bid != null && h('h2', null, 'Le toca a ' + P[cur]), d.el, err,
+            bid == null && btn('⏭️ Ya la conocemos: otra pregunta', () => { C.skip('subasta'); round--; next(); }, 'small'),
             btn(bid == null ? 'Apostar' : 'Subir la apuesta', () => {
               const v = d.value();
               if (v == null || (bid != null && v <= bid)) { err.textContent = bid == null ? 'Marca tu apuesta en la barra.' : 'Tu cifra tiene que superar ' + C.big(bid) + '.'; return; }
@@ -142,6 +153,7 @@
               turn();
             }, 'primary big'),
             bid != null && btn('¡Te has pasado! Desafiar a ' + P[bidder], () => {
+              C.commit();
               const ok = it[1] >= bid, win = ok ? bidder : cur, lose = ok ? cur : bidder, last = round >= s.rounds;
               pts[win]++;
               cur = lose;

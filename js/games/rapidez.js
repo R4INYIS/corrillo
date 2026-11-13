@@ -48,6 +48,7 @@
       }
       function boom() {
         C.sound.boom();
+        C.commit();
         booms[cur]++;
         ctx.show(h('div', { class: 'center' }, h('div', { class: 'bomb' }, '💥'), h('h2', null, 'Le ha explotado a ' + P[cur]), C.penalty(P[cur]),
           h('div', { class: 'list' }, P.map((p, i) => h('div', { class: 'item' + (i === cur ? ' miss' : '') }, h('span', null, p), h('b', null, '💥 ' + booms[i])))),

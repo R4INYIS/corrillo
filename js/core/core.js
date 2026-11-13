@@ -77,21 +77,53 @@
   }
   const usedMem = {};
   /* Devuelve un elemento al azar que no haya salido todavía; cuando se agotan, vuelve a barajar. */
-  C.draw = function (key, pool) {
+  /* Mazos sin repetir.
+     · C.draw(clave, pool, {keep}) saca una carta que no se haya JUGADO en este dispositivo ni haya salido en esta sesión.
+     · La carta queda pendiente y solo se guarda como jugada (localStorage «used:<clave>») cuando su ronda termina:
+       al llamar a C.commit(), al sacar la siguiente carta o al llegar a la pantalla final (endBar).
+     · C.skip(clave) descarta la pendiente sin guardarla (botón «Saltar» de algunos juegos).
+     · Si se sale a mitad de ronda, la pendiente se olvida.
+     · keep: false → no se guarda nunca entre sesiones; solo se evita repetir dentro de la sesión (En la misma onda).
+     Cuando no quedan cartas sin jugar, el mazo de ese pool se baraja de nuevo. */
+  const idOf = (it) => hash(typeof it === 'string' ? it : JSON.stringify(it));
+  const seenMem = {}, pending = {};
+  const usedOf = (key) => usedMem[key] || (usedMem[key] = store.get('used:' + key, []));
+  C.commit = function () {
+    Object.keys(pending).forEach((key) => {
+      const p = pending[key];
+      delete pending[key];
+      if (!p.keep) return;
+      const used = usedOf(key);
+      if (!used.includes(p.id)) { used.push(p.id); store.set('used:' + key, used); }
+    });
+  };
+  C.skip = (key) => { delete pending[key]; };
+  C.discard = () => Object.keys(pending).forEach((k) => delete pending[k]);
+  C.draw = function (key, pool, opts) {
     if (!pool.length) return null;
-    let used = usedMem[key] || (usedMem[key] = store.get('used:' + key, []));
-    const id = (it) => hash(typeof it === 'string' ? it : JSON.stringify(it));
-    let free = pool.filter((it) => !used.includes(id(it)));
+    C.commit();
+    const keep = !(opts && opts.keep === false);
+    const seen = seenMem[key] || (seenMem[key] = []);
+    const ids = pool.map(idOf);
+    let used = keep ? usedOf(key) : [];
+    let free = pool.filter((_, i) => !used.includes(ids[i]) && !seen.includes(ids[i]));
+    if (!free.length && keep && pool.some((_, i) => used.includes(ids[i]))) {
+      used = usedMem[key] = used.filter((u) => !ids.includes(u));   // mazo agotado: se baraja de nuevo
+      store.set('used:' + key, used);
+      free = pool.filter((_, i) => !seen.includes(ids[i]));
+    }
     if (!free.length) {
-      const ids = pool.map(id);
-      used = usedMem[key] = used.filter((u) => !ids.includes(u));
+      seenMem[key] = seen.filter((u) => !ids.includes(u));
       free = pool;
     }
-    const it = pick(free);
-    used.push(id(it));
-    store.set('used:' + key, used);
+    const it = pick(free), id = idOf(it);
+    seenMem[key].push(id);
+    pending[key] = { id, keep };
     return it;
   };
+  /* Cuántas cartas de un pool quedan sin jugar en este dispositivo. */
+  C.unplayed = (key, pool) => { const used = usedOf(key); return pool.filter((it) => !used.includes(idOf(it))).length; };
+  C.forget = (key) => { usedMem[key] = []; store.set('used:' + key, []); };
 
   /* ---------- Sonido y vibración ---------- */
   let actx = null;
@@ -287,14 +319,28 @@
   };
 
   /* Coloca las estimaciones de todos sobre la misma escala, con la respuesta real marcada. */
-  C.plot = function (points, answer, lin) {
-    const toP = (x) => Math.max(0, Math.min(1, lin ? (x - lin.min) / (lin.max - lin.min) : Math.log10(x + 1) / 12)) * 100;
-    const marks = lin ? [lin.min, lin.max].map((x) => [toP(x), String(x)]) : [[0, '0'], [25, '1K'], [50, '1M'], [75, '1B'], [100, '1T']];
-    return h('div', { class: 'dial plot' },
-      h('div', { class: 'plot-track' }, h('div', { class: 'dial-rail' }),
-        h('div', { class: 'plot-ans', style: 'left:' + toP(answer) + '%' }, h('b', null, '✓')),
-        points.map(([name, v], i) => h('div', { class: 'plot-dot' + (i % 2 ? ' low' : ''), style: 'left:' + toP(v) + '%' }, h('span', null, name.slice(0, 3))))),
-      h('div', { class: 'dial-scale' }, marks.map(([p, t]) => h('span', { style: 'left:' + p + '%' }, t))));
+  /* Dibuja las estimaciones sobre la barra. lin = {min, max} para barra lineal (años); si no, logarítmica 0–1T.
+     zoom = {min, max, fmt}: tras un instante, la barra se amplía a escala LINEAL en ese tramo para ver las distancias reales. */
+  C.plot = function (points, answer, lin, zoom) {
+    const pos = (x, l) => Math.max(0, Math.min(1, l ? (x - l.min) / (l.max - l.min || 1) : Math.log10(x + 1) / 12)) * 100;
+    const scaleOf = (l, fmt) => l ? [0, 0.5, 1].map((p) => [p * 100, (fmt || String)(Math.round(l.min + p * (l.max - l.min)))]) : [[0, '0'], [25, '1K'], [50, '1M'], [75, '1B'], [100, '1T']];
+    const ans = h('div', { class: 'plot-ans', style: 'left:' + pos(answer, lin) + '%' }, h('b', null, '✓'));
+    const dots = points.map(([name, v], i) => h('div', { class: 'plot-dot' + (i % 2 ? ' low' : ''), style: 'left:' + pos(v, lin) + '%' }, h('span', null, name.slice(0, 3))));
+    const scale = h('div', { class: 'dial-scale' }), note = h('p', { class: 'plot-note' });
+    const paint = (l, fmt) => scale.replaceChildren(...scaleOf(l, fmt).map(([p, t]) => h('span', { style: 'left:' + p + '%' }, t)));
+    paint(lin);
+    const el = h('div', { class: 'dial plot' }, h('div', { class: 'plot-track' }, h('div', { class: 'dial-rail' }), ans, dots), scale, zoom && note);
+    if (zoom) {
+      note.textContent = lin ? '' : 'Escala logarítmica';
+      setTimeout(() => {
+        el.classList.add('zoomed');
+        ans.style.left = pos(answer, zoom) + '%';
+        dots.forEach((d, i) => (d.style.left = pos(points[i][1], zoom) + '%'));
+        paint(zoom, zoom.fmt);
+        note.textContent = '🔍 Escala ampliada (lineal): las distancias son reales';
+      }, lin ? 0 : 1100);
+    }
+    return el;
   };
 
   function stepper(v, min, max, on) {
@@ -514,6 +560,7 @@
     };
     function stop() {
       ctx.alive = false;
+      C.discard();   /* lo que quedara a medias no cuenta como jugado */
       cleanup.splice(0).forEach((f) => { try { f(); } catch (e) {} });
       session = null;
       wake(false);
@@ -522,7 +569,7 @@
     ctx.again = () => { stop(); play(g); };
     ctx.setup = () => { stop(); location.hash = '#/j/' + g.id; };
     ctx.menu = () => { stop(); location.hash = '#/'; };
-    ctx.endBar = (label) => h('div', { class: 'stack endbar' }, btn(label || 'Otra partida', ctx.again, 'primary big'), h('div', { class: 'row2' }, btn('Ajustes', ctx.setup), btn('Menú', ctx.menu)));
+    ctx.endBar = (label) => (C.commit(), h('div', { class: 'stack endbar' }, btn(label || 'Otra partida', ctx.again, 'primary big'), h('div', { class: 'row2' }, btn('Ajustes', ctx.setup), btn('Menú', ctx.menu))));
     session = { g, stop };
     document.title = g.name + ' · ' + C.NAME;
     const root = h('div', { class: 'play', style: '--c:' + g.color },
@@ -545,7 +592,7 @@
       turn: () => (++n > limit ? (done(), true) : false),
       again: () => C.sub(ctx, g, limit, done),
     });
-    sub.endBar = () => h('div', { class: 'stack endbar' }, btn('Siguiente juego', done, 'primary big'), h('div', { class: 'row2' }, btn('Repetir', sub.again), btn('Terminar fiesta', ctx.menu)));
+    sub.endBar = () => (C.commit(), h('div', { class: 'stack endbar' }, btn('Siguiente juego', done, 'primary big'), h('div', { class: 'row2' }, btn('Repetir', sub.again), btn('Terminar fiesta', ctx.menu))));
     ctx.setTitle('🎉 ' + g.emoji + ' ' + g.name, g.color);
     g.play(sub);
   };

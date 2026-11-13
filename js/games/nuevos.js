@@ -40,7 +40,7 @@
         if (ctx.turn()) return;
         const cur = t++ % P.length, text = C.draw('cinco', C.pool(C.content.cinco, s.cats));
         const q = () => h('div', { class: 'card q' }, h('small', null, 'Di tres…'), text);
-        const verdict = (ok) => { if (ok) pts[cur]++; ok ? C.sound.ok() : C.sound.bad(); next(); };
+        const verdict = (ok) => { C.commit(); if (ok) pts[cur]++; ok ? C.sound.ok() : C.sound.bad(); next(); };
         ctx.show(h('div', { class: 'center' }, h('p', { class: 'lead' }, 'Le toca a'), h('h2', { class: 'name' }, P[cur]), btn('Ver la consigna y empezar', () => {
           const clock = C.clock(ctx, s.secs, () => ctx.show(h('div', { class: 'center' }, h('div', { class: 'big-emoji' }, '⏰'), h('h2', null, '¡Tiempo!'), q(),
             h('div', { class: 'row2', style: 'width:100%' }, btn('Llegó a tiempo', () => verdict(true), 'yes big'), btn('No llegó', () => verdict(false), 'no big')))));
@@ -68,6 +68,7 @@
         }, () => reveal(C.shuffle(P.map((_, i) => i)), 0), { verb: 'Escribir mi respuesta' }), 'primary big')));
 
         function reveal(order, k) {
+          if (k === 0) C.commit();
           const i = order[k], slot = h('div', { class: 'stack' });
           const go = btn(k + 1 < order.length ? 'Siguiente respuesta' : 'Otra pregunta', () => (k + 1 < order.length ? reveal(order, k + 1) : next()), 'primary big');
           slot.append(h('p', { class: 'muted' }, '¿Quién ha escrito esto?'), btn('Revelar autor', () => slot.replaceChildren(h('h2', null, '✍️ ' + P[i]), go), 'primary big'));
@@ -100,6 +101,7 @@
             () => C.pass(ctx, others.map((i) => P[i]), (p, j, fwd) => choose('¿Qué ha elegido ' + P[pro] + '?', fwd, (v) => (guess[j] = v)), result, { verb: 'Apostar' }), { verb: 'Responder en secreto' }), 'primary big')));
 
         function result() {
+          C.commit();
           const hits = others.filter((_, j) => guess[j] === truth);
           hits.forEach((i) => pts[i]++);
           if (hits.length * 2 >= others.length) pts[pro]++;
@@ -175,11 +177,15 @@
           return ctx.show(h('div', { class: 'center' }, C.secret(pct >= 0.75 ? '🧠' : pct >= 0.45 ? '📡' : '📵', 'Puntuación del grupo', score + ' de ' + max, pct >= 0.75 ? 'Compartís cerebro.' : pct >= 0.45 ? 'Buena sintonía, con interferencias.' : 'Sin cobertura.'),
             C.shareBtn('En la misma onda', ['Sintonía del grupo', score + ' de ' + max + ' puntos'], '#b79cff'), ctx.endBar()));
         }
-        const giver = t++ % P.length, [L, R] = C.draw('onda', C.pool(C.content.onda, s.cats)).split('|'), target = 5 + C.rnd(91);
-        let clue = '';
+        /* Las escalas pueden repetirse entre partidas (otra pista, otra ronda): solo se evita repetirlas en la misma sesión. */
+        const pool = C.pool(C.content.onda, s.cats), deal = () => C.draw('onda', pool, { keep: false }).split('|');
+        const giver = t++ % P.length, target = 5 + C.rnd(91);
+        let [L, R] = deal(), clue = '';
         C.pass(ctx, [P[giver]], () => {
           const inp = h('input', { type: 'text', class: 'textin', maxLength: 40, placeholder: 'Tu pista (una persona, cosa, situación…)', autocomplete: 'off' });
-          return { node: h('div', { class: 'stack' }, h('p', { class: 'muted' }, 'Piensa algo que, entre estos dos extremos, caiga justo en el 4. No digas números ni posiciones.'), scale(L, R, target, null), inp),
+          const wheel = h('div', null, scale(L, R, target, null));
+          const swap = btn('🔄 No se me ocurre nada: otra escala', () => { C.skip('onda'); [L, R] = deal(); wheel.replaceChildren(scale(L, R, target, null)); }, 'small');
+          return { node: h('div', { class: 'stack' }, h('p', { class: 'muted' }, 'Piensa algo que, entre estos dos extremos, caiga justo en el 4. No digas números ni posiciones.'), wheel, inp, swap),
             before: () => (inp.value.trim() ? void (clue = inp.value.trim()) : 'Escribe una pista.') };
         }, () => {
           let v = 50;
@@ -224,6 +230,7 @@
         const cur = t++ % P.length, word = C.draw('contrasena', C.pool(C.content.charadas, s.cats));
         let used = 1;
         const done = (got) => {
+          C.commit();
           pts[side(cur)] += got;
           got ? C.sound.ok() : C.sound.bad();
           ctx.show(h('div', { class: 'center' }, h('div', { class: 'card q' }, h('small', null, 'La palabra era'), word), h('h2', null, got ? '+' + got + (got === 1 ? ' punto' : ' puntos') : 'Sin puntos'),

@@ -1,6 +1,6 @@
 /* Corrillo — service worker: guarda la app para jugar sin conexión.
    Al cambiar archivos, sube el número de VERSION para que los móviles descarguen la versión nueva. */
-const VERSION = 'corrillo-v5';
+const VERSION = 'corrillo-v6';
 const FILES = [
   "./",
   "index.html",

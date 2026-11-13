@@ -22,6 +22,7 @@
         const cur = t % P.length, [v, text, why] = C.draw('invento', C.pool(C.content.invento, s.cats)).split('|');
         t++;
         const answer = (said) => {
+          C.commit();
           const ok = said === v;
           if (ok) pts[cur]++;
           ok ? C.sound.ok() : C.sound.bad();
@@ -30,7 +31,8 @@
             btn(t >= total ? 'Ver clasificación' : 'Siguiente', next, 'primary big')));
         };
         ctx.show(h('div', { class: 'center' }, h('p', { class: 'pill' }, P[cur] + ' · ' + t + ' de ' + total), h('div', { class: 'card q' }, text),
-          h('div', { class: 'row2', style: 'width:100%' }, btn('✅ Verdad', () => answer('V'), 'yes big'), btn('🤥 Invento', () => answer('F'), 'no big'))));
+          h('div', { class: 'row2', style: 'width:100%' }, btn('✅ Verdad', () => answer('V'), 'yes big'), btn('🤥 Invento', () => answer('F'), 'no big')),
+          btn('⏭️ Ya me la sé: otra', () => { C.skip('invento'); t--; next(); }, 'small')));
       })();
     },
   });
@@ -57,7 +59,8 @@
         t++;
         const q = () => h('div', { class: 'card q' }, h('small', null, 'Reto para ' + P[doer]), text);
         ctx.show(h('div', { class: 'center' }, h('p', { class: 'pill' }, 'Reto ' + t + ' de ' + total), q(), h('p', { class: 'lead' }, P[bettor] + ', ¿lo conseguirá?'),
-          h('div', { class: 'row2', style: 'width:100%' }, btn('Sí', () => attempt(true), 'yes big'), btn('No', () => attempt(false), 'no big'))));
+          h('div', { class: 'row2', style: 'width:100%' }, btn('Sí', () => attempt(true), 'yes big'), btn('No', () => attempt(false), 'no big')),
+          btn('⏭️ Cambiar de reto', () => { C.skip('apuesto'); t--; next(); }, 'small')));
 
         function attempt(bet) {
           const slot = h('div');
@@ -68,6 +71,7 @@
         let ck = null;
         function result(bet, done) {
           if (ck) ck.stop();
+          C.commit();
           if (done) pts[doer]++;
           if (bet === done) pts[bettor]++;
           ctx.show(h('div', { class: 'center' }, h('div', { class: 'big-emoji' }, done ? '🏆' : '🙈'),
